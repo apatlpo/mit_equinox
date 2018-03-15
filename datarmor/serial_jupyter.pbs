@@ -1,0 +1,46 @@
+#!/bin/csh
+#PBS -l mem=10g
+#PBS -l walltime=24:00:00
+#  COMMENT
+#  Tina ODAKA 28.02.2017
+#  example for using datarmor with 'queue  seq'
+#  By default, if you use 'seq' it use 500mb of memory
+#  but by defining -l mem=1g, you can use 1g of memory
+#  but by defining -l walltime=00:30:00, you can run your job at least 30 minutes
+#  We have 125G of usable memory for users on ICE
+#  
+#  If you request more than 21G of memory, and if you are allowed to user UV your job goes automatically to UV.
+#  We have 5050G of usable memory for users on UV
+#  
+#  COMMENT
+#
+# cd to the directory you submitted your job
+cd $PBS_O_WORKDIR
+qstat -f $PBS_JOBID
+
+#source /usr/share/Modules/3.2.10/init/csh
+#module list
+cat $PBS_NODEFILE | uniq >  "$PBS_JOBID.nodefile"
+
+date
+## sleep
+sleep 2h
+## or run script
+#set path = ($HOME/.miniconda2/envs/daskdist/bin $path)
+#cp /home1/datahome/aponte/iwave_sst/hw/hw_cloudmask_agglo.py .
+#python hw_cloudmask_agglo.py  >&  "$PBS_JOBID-python.out"
+date
+
+
+# Run jupyter notebook
+# cat *.nodefile
+#
+# ssh -L 9999:localhost:9999  datarmor1-10g
+# ssh -L 9999:localhost:8886 r1i0n0.ib0.ice.ifremer.fr
+# set path = ($HOME/.miniconda2/envs/daskdist/bin $path); jupyter notebook --no-browser --port=8886
+#
+# ps -ax | grep localhost
+#
+# ps -aux | grep aponte
+# netstat -lntu | grep 99
+
