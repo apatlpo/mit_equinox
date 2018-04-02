@@ -6,13 +6,22 @@ set -e
 #   source activate pangeo
 #   ./launch-dask.sh 4 
 
-source activate pangeo
+source activate pangeon
+#source activate pangeod0161
+#source activate pangeod0160
+#source activate pangeod0154b
 
 # create a directory to store temporary dask data
-mkdir -p $DATAWORK/dask 
-echo "Clean up ${DATAWORK}/dask"
+#mkdir -p $DATAWORK/dask 
+#rm -rf $DATAWORK/dask/*
+#
+#mkdir -p $SCRATCH/dask 
+#echo "Clean up ${SCRATCH}/dask"
+#rm -rf $SCRATCH/dask/*
+
 
 SCHEDULER=$DATAWORK/dask/scheduler.json
+#SCHEDULER=$SCRATCH/dask/scheduler.json
 rm -f $SCHEDULER
 
 echo "Launching dask scheduler"

@@ -1,0 +1,17 @@
+#!/bin/csh
+#PBS -l mem=10g
+#PBS -l walltime=24:00:00
+
+# cd to the directory you submitted your job
+cd $PBS_O_WORKDIR
+
+setenv PATH ${HOME}/.miniconda3/envs/pangeon/bin:${PATH}
+
+date
+# launch jupyterlab
+python jlab.py > "jlab.log"
+# and goes to sleep
+sleep 24h
+date
+
+
