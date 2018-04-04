@@ -22,7 +22,7 @@ rm -f ${SCHEDULER}
 mpirun --np 7 dask-mpi --nthreads 4 \
      --memory-limit 1e10 \
      --interface ib0 \
-     --local-directory ${DATAWORK}/dask \
+     --local-directory ${SCRATCH}/dask \
      --scheduler-file=${SCHEDULER}
 
 
