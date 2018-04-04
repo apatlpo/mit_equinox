@@ -5,11 +5,15 @@ Download Miniconda3 (i.e. for python3) from the [conda website](https://conda.io
 bash Miniconda3-latest-Linux-x86_64.sh
 bash
 conda update conda
-conda create -n equinox -c conda-forge python=3.6 dask distributed xarray \
-      jupyterlab mpi4py cartopy 
+conda create -n equinox -c conda-forge python=3.6 dask xarray \
+      jupyterlab cartopy utide
 source activate equinox
+# tmp, install latest distributed and openqueue
+conda uninstall distributed --force    # uninstall distributed
+pip install git+https://github.com/dask/distributed.git
+pip install git+https://github.com/guillaumeeb/dask-jobqueue.git@slurm_refactor
+# should be: pip install git+https://github.com/dask/dask-jobqueue.git
 pip install cmocean
-conda install utide -c conda-forge
 ```
 
 In order to add the environnement to kernels available to jupyter, you need to run:
