@@ -11,8 +11,7 @@ source activate equinox
 # tmp, install latest distributed and openqueue
 conda uninstall distributed --force    # uninstall distributed
 pip install git+https://github.com/dask/distributed.git
-pip install git+https://github.com/guillaumeeb/dask-jobqueue.git@slurm_refactor
-# should be: pip install git+https://github.com/dask/dask-jobqueue.git
+pip install git+https://github.com/dask/dask-jobqueue.git
 pip install cmocean
 ```
 
