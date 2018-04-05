@@ -23,7 +23,7 @@ In order to add the environnement to kernels available to jupyter, you need to r
 python -m ipykernel install --user --name equinox --display-name "EQUINOX mit project env"
 ```
 
-Uninstall library after `pip install -e`:
+Uninstall library after `pip install -e .`:
 - remove the egg file ( `print(distributed.__file__)` for example)
 - from file `easy-install.pth`, remove the corresponding line (it should be a path to the source directory or of an egg file). 
 
