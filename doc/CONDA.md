@@ -15,12 +15,17 @@ pip install git+https://github.com/dask/dask-jobqueue.git
 pip install cmocean
 pip install git+https://github.com/xgcm/xmitgcm.git
 pip install git+https://github.com/xgcm/xgcm.git
+cd mit_equinox; pip install -e .
 ```
 
 In order to add the environnement to kernels available to jupyter, you need to run:
 ```
 python -m ipykernel install --user --name equinox --display-name "EQUINOX mit project env"
 ```
+
+Uninstall library after `pip install -e`:
+- remove the egg file ( `print(distributed.__file__)` for example)
+- from file `easy-install.pth`, remove the corresponding line (it should be a path to the source directory or of an egg file). 
 
 # General information about miniconda:
 
