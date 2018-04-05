@@ -13,6 +13,8 @@ conda uninstall distributed --force    # uninstall distributed
 pip install git+https://github.com/dask/distributed.git
 pip install git+https://github.com/dask/dask-jobqueue.git
 pip install cmocean
+pip install git+https://github.com/xgcm/xmitgcm.git
+pip install git+https://github.com/xgcm/xgcm.git
 ```
 
 In order to add the environnement to kernels available to jupyter, you need to run:
