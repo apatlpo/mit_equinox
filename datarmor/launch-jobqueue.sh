@@ -6,7 +6,7 @@ set -e
 #   source activate pangeo
 #   ./launch-jlab.sh 
 
-source activate pangeon
+source activate equinox
 
 # delete existing jlab log file
 JLAB_LOG='jlab.log'
