@@ -8,14 +8,11 @@ conda update conda
 conda create -n equinox -c conda-forge python=3.6 dask xarray \
       jupyterlab cartopy utide
 source activate equinox
-# tmp, install latest distributed and openqueue
-conda uninstall distributed --force    # uninstall distributed
-pip install git+https://github.com/dask/distributed.git
 pip install git+https://github.com/dask/dask-jobqueue.git
-pip install cmocean
 pip install git+https://github.com/xgcm/xmitgcm.git
 pip install git+https://github.com/xgcm/xgcm.git
 cd mit_equinox; pip install -e .
+pip install cmocean
 ```
 
 In order to add the environnement to kernels available to jupyter, you need to run:
