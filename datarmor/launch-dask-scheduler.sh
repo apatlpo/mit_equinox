@@ -12,9 +12,7 @@
 # >>> client = Client(scheduler_file='~/dask/scheduler.json')
 
 # Setup Environment
-setenv PATH ${HOME}/.miniconda3/envs/pangeon/bin:${PATH}
-#setenv PATH ${HOME}/.miniconda3/envs/pangeod0160/bin:${PATH}
-#setenv PATH ${HOME}/.miniconda3/envs/pangeod0154b/bin:${PATH}
+setenv PATH ${HOME}/.miniconda3/envs/equinox/bin:${PATH}
 
 setenv SCHEDULER ${DATAWORK}/dask/scheduler.json
 #setenv SCHEDULER ${SCRATCH}/dask/scheduler.json

@@ -3,7 +3,7 @@ set -e
 
 # Usage:
 #   bash
-#   source activate pangeo
+#   source activate equinox
 #   ./launch-jlab.sh 
 
 source activate equinox

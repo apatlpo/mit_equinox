@@ -7,9 +7,7 @@
 #PBS -m abe
 
 # Setup Environment
-setenv PATH ${HOME}/.miniconda3/envs/pangeon/bin:${PATH}
-#setenv PATH ${HOME}/.miniconda3/envs/pangeod0160/bin:${PATH}
-#setenv PATH ${HOME}/.miniconda3/envs/pangeod0154b/bin:${PATH}
+setenv PATH ${HOME}/.miniconda3/envs/equinox/bin:${PATH}
 
 # Setup dask worker
 setenv SCHEDULER ${DATAWORK}/dask/scheduler.json
