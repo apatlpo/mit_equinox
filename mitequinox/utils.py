@@ -4,6 +4,10 @@ import os
 import numpy as np
 import dask
 import xarray as xr
+import threading
+
+import matplotlib.pyplot as plt
+import cartopy.crs as ccrs
 
 import xmitgcm as xm
 
@@ -146,4 +150,49 @@ def get_iters_time(varname, data_dir, delta_t=25.):
     time = xr.DataArray(time, coords=[iters.values], dims=['iters'])
     
     return iters, time
+    
+    
+    
+#------------------------------ SST ---------------------------------------
+
+#
+def plot_eta(eta, colorbar=False, title=None, vmin=None, vmax=None, savefig=None, offline=False, 
+             coast_resolution='110m', figsize=(10,10)):
+    if vmin is None:
+        vmin = eta.min()
+    if vmax is None:
+        vmax = eta.max()    
+    MPL_LOCK = threading.Lock()
+    with MPL_LOCK:
+        if offline:
+            plt.switch_backend('agg')
+        #
+        fig = plt.figure(figsize=figsize)
+        #ax = fig.add_subplot(111, projection=ccrs.PlateCarree())
+        ax = fig.add_subplot(111)
+        try:
+            #im = eta.plot.pcolormesh(ax=ax, transform=ccrs.PlateCarree(), vmin=vmin, vmax=vmax,
+            #                    x='XC', y='YC', add_colorbar=colorbar, cmap=cm.thermal)
+            im = eta.plot.pcolormesh(vmin=vmin, vmax=vmax, add_colorbar=False, cmap=cm.thermal)
+            fig.colorbar(im)
+            #gl=ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=True, linewidth=2, color='k', 
+            #                alpha=0.5, linestyle='--')
+            #gl.xlabels_top = False
+            #ax.coastlines(resolution=coast_resolution, color='k')
+        except:
+            pass
+        #
+        if title is None:
+            ax.set_title('MIT eta')
+        else:
+            ax.set_title(title)
+        #
+        if savefig is not None:
+            fig.savefig(savefig, dpi=150)
+            plt.close(fig)
+        #
+        if not offline:
+            plt.show()
+
+
     
