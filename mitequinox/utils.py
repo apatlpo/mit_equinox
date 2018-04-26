@@ -1,12 +1,14 @@
-
 import os
-
 import numpy as np
 import dask
 import xarray as xr
+import threading
+
+import matplotlib.pyplot as plt
+import cartopy.crs as ccrs
+from cmocean import cm
 
 import xmitgcm as xm
-
 
 
 def get_compressed_level_index(grid_dir, index_fname='llc4320_compressed_level_index.nc', geometry='llc'):
@@ -39,9 +41,13 @@ def load_level_from_3D_field(data_dir, varname, inum, offset, count, mask, dtype
     ''' Some doc
     '''
 
-    inum_str = '%010d' % inum
     # all iters in one directory:
-    fname = os.path.join(data_dir, '%s.%s.data.shrunk' % (varname, inum_str))
+    inum_str = '%010d' % inum
+    if 'Eta' in varname:
+        suff = '.data.shrunk'
+    else:
+        suff = '.shrunk'            
+    fname = os.path.join(data_dir, '%s.%s' % (varname, inum_str) +suff)
     
     with open(fname, mode='rb') as file:
         file.seek(offset * dtype.itemsize)
@@ -139,11 +145,59 @@ def get_iters_time(varname, data_dir, delta_t=25.):
     time: xarray DataArray
         time in seconds
     '''
-    iters = xm.mds_store._get_all_iternums(data_dir, file_prefixes=varname, file_format='*.??????????.data.shrunk')
+    file_suff = '.shrunk'
+    if varname is 'Eta':
+        file_suff = '.data.shrunk'
+    #
+    iters = xm.mds_store._get_all_iternums(data_dir, file_prefixes=varname, 
+                                           file_format='*.??????????'+file_suff)
     time = delta_t * np.array(iters)
     
     iters = xr.DataArray(iters, coords=[time], dims=['time'])
     time = xr.DataArray(time, coords=[iters.values], dims=['iters'])
     
     return iters, time
+
+
     
+#------------------------------ plot ---------------------------------------
+
+#
+def plot_scalar(v, colorbar=False, title=None, vmin=None, vmax=None, savefig=None, 
+                offline=False, coast_resolution='110m', figsize=(10,10), cmmap='thermal'):
+    #
+    if vmin is None:
+        vmin = v.min()
+    if vmax is None:
+        vmax = v.max()
+    #
+    MPL_LOCK = threading.Lock()
+    with MPL_LOCK:
+        if offline:
+            plt.switch_backend('agg')
+        #
+        fig = plt.figure(figsize=figsize)
+        ax = fig.add_subplot(111, projection=ccrs.PlateCarree())
+        #ax = fig.add_subplot(111)
+        cmap = getattr(cm, cmmap)
+        try:
+            im = v.plot.pcolormesh(ax=ax, transform=ccrs.PlateCarree(), vmin=vmin, vmax=vmax,
+                                   x='XC', y='YC', add_colorbar=colorbar, cmap=cmap)
+            #im = v.plot.pcolormesh(ax=ax, add_colorbar=False, cmap=cmap)
+            fig.colorbar(im)
+            gl=ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=True, linewidth=2, color='k', 
+                            alpha=0.5, linestyle='--')
+            gl.xlabels_top = False
+            ax.coastlines(resolution=coast_resolution, color='k')
+        except:
+            pass
+        #
+        if title is not None:
+            ax.set_title(title)
+        #
+        if savefig is not None:
+            fig.savefig(savefig, dpi=150)
+            plt.close(fig)
+        #
+        if not offline:
+            plt.show()
