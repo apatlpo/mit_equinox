@@ -11,6 +11,7 @@ source activate equinox
 pip install git+https://github.com/dask/dask-jobqueue.git
 pip install git+https://github.com/xgcm/xmitgcm.git
 pip install git+https://github.com/xgcm/xgcm.git
+pip install git+https://github.com/rabernat/xrft.git
 cd mit_equinox; pip install -e .
 pip install cmocean
 ```

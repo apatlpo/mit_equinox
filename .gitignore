@@ -40,5 +40,7 @@ __pycache__/
 dask-worker*
 dask-scheduler*
 jlab.pbs.o*
-jlab.log
+*.log
+*.nodefile
+
 

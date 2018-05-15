@@ -11,6 +11,14 @@ from cmocean import cm
 import xmitgcm as xm
 
 
+#tmp = os.getenv('TMPDIR')
+datawork = os.getenv('DATAWORK')
+home = os.getenv('HOME')
+scratch = os.getenv('SCRATCH')
+#
+root_data_dir = '/home/datawork-lops-osi/data/mit4320/'
+grid_dir = root_data_dir+'grid/'
+
 def get_compressed_level_index(grid_dir, index_fname='llc4320_compressed_level_index.nc', geometry='llc'):
     ''' Some doc
     '''
