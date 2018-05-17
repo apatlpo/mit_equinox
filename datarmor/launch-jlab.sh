@@ -14,6 +14,8 @@ rm -f $JLAB_LOG
 
 echo "Launching job ..."
 s=`qsub jlab.pbs`
+# in order to have live log output, use instead:
+#s=`qsub -k oe jlab.pbs`
 sjob=${s%.*}
 echo " ... ${s} done"
 
