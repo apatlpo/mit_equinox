@@ -37,6 +37,7 @@ __pycache__/
 *.login
 
 # dask files
+daskf.pbs
 dask-worker*
 dask-scheduler*
 jlab.pbs.o*

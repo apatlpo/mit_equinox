@@ -1,5 +1,5 @@
 #!/bin/bash
-#PBS -N sample_dask_pbs
+#PBS -N dask_pbs
 #PBS -q mpi_8
 #PBS -l select=8:ncpus=28:mem=100g
 #PBS -l walltime=24:00:00
