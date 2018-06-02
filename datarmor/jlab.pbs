@@ -9,7 +9,7 @@ setenv PATH ${HOME}/.miniconda3/envs/equinox/bin:${PATH}
 
 date
 # launch jupyterlab
-python jlab.py > "jlab.log"
+python jlab.py $DASHINFO  > $JLAB_LOG
 # and goes to sleep
 sleep 24h
 date

@@ -1,4 +1,7 @@
 #!/bin/bash
+# Usage:
+
+# ./launch
 
 rm daskf.pbs &> /dev/null
 
