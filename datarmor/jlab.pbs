@@ -5,7 +5,7 @@
 # cd to the directory you submitted your job
 cd $PBS_O_WORKDIR
 
-setenv PATH ${HOME}/.miniconda3/envs/equinox/bin:${PATH}
+setenv PATH ${HOME}/.miniconda3/envs/$CONDAENV/bin:${PATH}
 
 date
 # launch jupyterlab
