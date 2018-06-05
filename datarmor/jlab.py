@@ -40,7 +40,7 @@ if __name__ == '__main__':
     cmd = ['jupyter', 'lab', '--ip', host, 
            '--no-browser', '--port', jlab_port, 
            '--notebook-dir', notebook_dir]
-    print(' '.join(cmd))
+    #print(' '.join(cmd))
     proc = subprocess.Popen(cmd)
 
     if dash:

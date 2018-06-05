@@ -62,7 +62,7 @@ echo " ... ${s} launched"
 # wait for jlab.log
 while true; do
     if [ -f $JLAB_LOG ]; then
-        echo "$JLAB_LOG has been found "
+        #echo "$JLAB_LOG has been found "
 	cat ${JLAB_LOG}
         echo "Kill jlab job with:"
         echo "qdel ${sjob}"

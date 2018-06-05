@@ -15,46 +15,36 @@ All scripts require python librairies that may be installed with conda according
 
 After having installed all libraries, and cloned this repository, go into `mit_equinox/datarmor`.
 
-### method 1 (recommended):
+### method 1 :
 
-Edit `launch-dask-cluster-conda.pbs` and adjust the header with the desired number of computational nodes.
 For 8 nodes for example:
 ```
-#PBS -q mpi_8
-#PBS -l select=8:ncpus=28:mem=100g
-```
-Then run:
-```
-qsub launch-dask-cluster-conda.pbs
-./launch-jobqueue.sh
+./launch-dask.sh 8
+./launch-jlab.sh wait
 ```
 
 Follow instructions that pop up from there
 
-Once you are done computing, kill the `jlab.pbs` and `sample_dask_pbs` jobs.
+Once you are done computing, kill the relevant jobs.
 
 Clean up after computations: `./clean.sh`
 
 ### method 2:
 
 ```
-./launch-jobqueue.sh
+./launch-jlab.sh
 ```
 
 Follow instructions that pop up from there.
+
+The spin up of dask relies on dask-jobqueue:
+```
+... example ...
+```
 
 Kill jobs once done with computations. 
 `python kill.py` may be used.
 
 Clean up after computations: `./clean.sh`
 
-
-
----
-## misc
-
-Simple SSH port forward from slyne:
-```
-ssh -N -L 8888:localhost:8888 slyne
-```
 
