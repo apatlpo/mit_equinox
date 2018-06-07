@@ -36,6 +36,7 @@ if __name__ == '__main__':
         bhost = head.split('.')[0]
     else:
         dash = False
+        bhost = host
 
     cmd = ['jupyter', 'lab', '--ip', host, 
            '--no-browser', '--port', jlab_port, 
@@ -43,15 +44,20 @@ if __name__ == '__main__':
     #print(' '.join(cmd))
     proc = subprocess.Popen(cmd)
 
-    if dash:
-        print(f'ssh -N -L {jlab_port}:{host}:{jlab_port} '
+    print(f'ssh -N -L {jlab_port}:{host}:{jlab_port} '
               f'-L {dash_port}:{bhost}:8787 {user}@{hostname}')
-    else:
-        print(f'ssh -N -L {jlab_port}:{host}:{jlab_port} '
-              f' {user}@{hostname}')
+    #if dash:
+    #    print(f'ssh -N -L {jlab_port}:{host}:{jlab_port} '
+    #          f'-L {dash_port}:{bhost}:8787 {user}@{hostname}')
+    #else:
+    #    print(f'ssh -N -L {jlab_port}:{host}:{jlab_port} '
+    #          f' {user}@{hostname}')
     print('(Change the first port number if it is already used)')
     print('Then open the following URLs:')
     print(f'\tJupyter lab: http://localhost:{jlab_port}')
-    if dash:
-        print(f'\tDask dashboard: http://localhost:{dash_port}', flush=True)
+    #if dash:
+    print(f'\tDask dashboard: http://localhost:{dash_port}', flush=True)
+
+
+
 

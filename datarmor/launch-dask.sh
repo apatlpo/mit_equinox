@@ -22,7 +22,7 @@ fi
 
 echo "Number of nodes used for dask: $NNODES"
 
-qsub daskf.pbs
+qsub -m n daskf.pbs
 
 
 

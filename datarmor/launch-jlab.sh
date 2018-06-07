@@ -53,7 +53,7 @@ rm -f $JLAB_LOG > /dev/null 2>&1
 
 echo "Launching job ..."
 #s=`qsub jlab.pbs`
-s=`qsub -v JLAB_LOG=$JLAB_LOG,DASHINFO=$DASHINFO,CONDAENV=$CONDAENV jlab.pbs`
+s=`qsub -m n -v JLAB_LOG=$JLAB_LOG,DASHINFO=$DASHINFO,CONDAENV=$CONDAENV jlab.pbs`
 # in order to have live log output, use the following qsub option: -k oe
 
 sjob=${s%.*}
