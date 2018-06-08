@@ -1,0 +1,19 @@
+jobqueue:
+#   name: dask-worker
+  threads: 4
+  processes: 2
+  memory: 50GB
+  interface: ib0
+#   death-timeout: 100
+#   local-directory: null
+#   extra: ""
+#   env-extra: []
+
+  queue: mpi_1
+  project: datarmor
+  walltime: '24:00:00'
+
+  pbs:
+    resource-spec: select=1:ncpus=28:mem=100GB
+    job-extra: ['-m n']
+
