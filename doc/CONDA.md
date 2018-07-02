@@ -18,7 +18,7 @@ pip install git+https://github.com/apatlpo/xscale.git
 pip install git+https://github.com/apatlpo/UTide.git
 pip install cmocean
 cd mit_equinox; pip install -e .
-cp datarmor/jobqueue.yaml ~/.config/dask/
+cp datarmor/jobqueue.yaml datarmor/distributed.yaml ~/.config/dask/
 ```
 
 In order to add the environnement to kernels available to jupyter, you need to run:
