@@ -3,41 +3,22 @@
 Should we write dependencies in setup.py file in order to automate
 the install of some libraries ?
 
-Temporary install (waiting for dask 0.18.0 and xscale PR)
-```
-conda update conda
-conda create -n equinox -c conda-forge python=3.6 dask xarray \
-      jupyterlab cartopy utide
-source activate equinox
-conda uninstall dask --force
-conda uninstall distributed --force
-pip install git+https://github.com/dask/dask.git
-pip install git+https://github.com/dask/distributed.git
-pip install git+https://github.com/dask/dask-jobqueue.git
-pip install git+https://github.com/xgcm/xmitgcm.git
-pip install git+https://github.com/xgcm/xgcm.git
-pip install git+https://github.com/apatlpo/xscale.git
-cd mit_equinox; pip install -e .
-cp datarmor/jobqueue.yaml ~/.config/dask/
-pip install cmocean
-```
-
-Regular install:
 Download Miniconda3 (i.e. for python3) from the [conda website](https://conda.io/miniconda.html)
 ```
 bash Miniconda3-latest-Linux-x86_64.sh
 bash
 conda update conda
-conda create -n equinox -c conda-forge python=3.6 dask xarray \
-      jupyterlab cartopy utide
-source activate equinox
-pip install git+https://github.com/dask/dask-jobqueue.git
+conda create -n equinox -c conda-forge python=3.6 dask dask-jobqueue \
+            xarray jupyterlab cartopy 
+conda activate equinox
 pip install git+https://github.com/xgcm/xmitgcm.git
 pip install git+https://github.com/xgcm/xgcm.git
 pip install git+https://github.com/rabernat/xrft.git
-pip install git+https://github.com/serazing/xscale.git
-cd mit_equinox; pip install -e .
+pip install git+https://github.com/apatlpo/xscale.git
+pip install git+https://github.com/apatlpo/UTide.git
 pip install cmocean
+cd mit_equinox; pip install -e .
+cp datarmor/jobqueue.yaml ~/.config/dask/
 ```
 
 In order to add the environnement to kernels available to jupyter, you need to run:
