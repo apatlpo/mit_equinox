@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 from cmocean import cm
 
+import datetime, dateutil
+
 import xmitgcm as xm
 
 
@@ -20,6 +22,7 @@ osi = '/home/datawork-lops-osi/aponte/'
 root_data_dir = '/home/datawork-lops-osi/data/mit4320/'
 grid_dir = root_data_dir+'grid/'
 
+#
 def get_compressed_level_index(grid_dir, index_fname='llc4320_compressed_level_index.nc', geometry='llc'):
     ''' Some doc
     '''
@@ -132,7 +135,10 @@ def get_compressed_data(varname, data_dir, grid_dir, ds_index=None, ds=None, ite
     ds[varname] = xr.Variable(['time', 'face', 'j', 'i'], data)   
     if time is not None:
         ds['time'] = time.sel(iters=iters).values
-    
+        #ds['dtime'] = iters_to_date(iters)
+        ds = ds.assign_coords(dtime=xr.DataArray(iters_to_date(iters), dims=['time']))
+        #ds = ds.assign(dtime=)
+        
     return ds
 
 
@@ -167,6 +173,11 @@ def get_iters_time(varname, data_dir, delta_t=25.):
     
     return iters, time
 
+def iters_to_date(iters, delta_t=25.):
+    t0 = datetime.datetime(2011,9,13)    
+    ltime = delta_t * (np.array(iters)-10368)
+    dtime = [t0+dateutil.relativedelta.relativedelta(seconds=t) for t in ltime]    
+    return dtime
 
     
 #------------------------------ plot ---------------------------------------
