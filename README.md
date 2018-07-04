@@ -36,7 +36,7 @@ client = Client(cluster)
 
 Kill jobs once done with computations in  a notebook with:
 ```
-cluster.stop_workers(cluster.jobs)
+cluster.scheduler.close()
 ```
 or in a shell with `python kill.py`.
 
