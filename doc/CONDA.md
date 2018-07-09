@@ -9,7 +9,7 @@ bash Miniconda3-latest-Linux-x86_64.sh
 bash
 conda update conda
 conda create -n equinox -c conda-forge python=3.6 dask dask-jobqueue \
-            xarray jupyterlab cartopy 
+            xarray jupyterlab cartopy zarr 
 conda activate equinox
 pip install git+https://github.com/xgcm/xmitgcm.git
 pip install git+https://github.com/xgcm/xgcm.git

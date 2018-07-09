@@ -9,6 +9,7 @@ set -e
 #   ./launch-jlab.sh  1208493.datarmor0.nodefile  (use a specific node file)
 #
 #  If you want to specify an conda environment use: -e <env_name>
+#  If you want to provide a specific digit for the port last digits: -p digit
 
 
 POSITIONAL=()
@@ -22,6 +23,11 @@ case $key in
     shift # past argument
     shift # past value
     ;;
+    -p|--portdigit)
+    PORTDIGIT="$2"
+    shift # past argument
+    shift # past value
+    ;;
     *)    # unknown option
     POSITIONAL+=("$1") # save it in an array for later
     shift # past argument
@@ -32,6 +38,10 @@ set -- "${POSITIONAL[@]}" # restore positional parameters
 
 if [ "${#CONDAENV}" -eq 0 ]; then
     CONDAENV="equinox"
+fi
+
+if [ "${#PORTDIGIT}" -eq 0 ]; then
+    PORTDIGIT="7"
 fi
 
 if [ "${#POSITIONAL[0]}" -eq 0 ]; then
@@ -52,8 +62,7 @@ JLAB_LOG="jlab.$RANDOM.log"
 rm -f $JLAB_LOG > /dev/null 2>&1
 
 echo "Launching job ..."
-#s=`qsub jlab.pbs`
-s=`qsub -m n -v JLAB_LOG=$JLAB_LOG,DASHINFO=$DASHINFO,CONDAENV=$CONDAENV jlab.pbs`
+s=`qsub -m n -v JLAB_LOG=$JLAB_LOG,DASHINFO=$DASHINFO,CONDAENV=$CONDAENV,PORTDIGIT=$PORTDIGIT jlab.pbs`
 # in order to have live log output, use the following qsub option: -k oe
 
 sjob=${s%.*}

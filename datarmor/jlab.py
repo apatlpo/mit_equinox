@@ -7,11 +7,12 @@ from glob import glob
 
 if __name__ == '__main__':
 
-    assert len(sys.argv)==2
+    assert len(sys.argv)==3
     dashinfo = sys.argv[1]
+    portdigit = sys.argv[2]
 
-    jlab_port = '8877'
-    dash_port = '8787'
+    jlab_port = '887%s' %portdigit
+    dash_port = '878%s' %portdigit
 
     notebook_dir = os.environ['HOME']
     user = os.environ['USER']
@@ -46,16 +47,9 @@ if __name__ == '__main__':
 
     print(f'ssh -N -L {jlab_port}:{host}:{jlab_port} '
               f'-L {dash_port}:{bhost}:8787 {user}@{hostname}')
-    #if dash:
-    #    print(f'ssh -N -L {jlab_port}:{host}:{jlab_port} '
-    #          f'-L {dash_port}:{bhost}:8787 {user}@{hostname}')
-    #else:
-    #    print(f'ssh -N -L {jlab_port}:{host}:{jlab_port} '
-    #          f' {user}@{hostname}')
     print('(Change the first port number if it is already used)')
     print('Then open the following URLs:')
     print(f'\tJupyter lab: http://localhost:{jlab_port}')
-    #if dash:
     print(f'\tDask dashboard: http://localhost:{dash_port}', flush=True)
 
 

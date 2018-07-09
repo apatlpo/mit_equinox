@@ -1,9 +1,10 @@
 #!/bin/csh
-#PBS -q sequentiel 
-#PBS -l mem=200g
+##PBS -q sequentiel 
+##PBS -l mem=200g
+##PBS -l walltime=04:00:00
 #PBS -l walltime=24:00:00
-##PBS -q mpi_1
-##PBS -l select=1:ncpus=28:mem=100g
+#PBS -q mpi_1
+#PBS -l select=1:ncpus=28:mem=100g
 
 # qstat -Qf sequentiel
 #     route_destinations = ice_1t,uv_1c,ice_1t_long,ice_1t_verylong,uv_1c_long, uv_1c_verylong
@@ -15,7 +16,7 @@ setenv PATH ${HOME}/.miniconda3/envs/$CONDAENV/bin:${PATH}
 
 date
 # launch jupyterlab
-python jlab.py $DASHINFO  > $JLAB_LOG
+python jlab.py $DASHINFO $PORTDIGIT  > $JLAB_LOG
 # and goes to sleep
 sleep 24h
 date
