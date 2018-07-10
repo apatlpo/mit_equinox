@@ -12,6 +12,7 @@ import datetime, dateutil
 
 import xmitgcm as xm
 
+#------------------------------ paths ---------------------------------------
 
 #tmp = os.getenv('TMPDIR')
 datawork = os.getenv('DATAWORK')
@@ -21,6 +22,9 @@ osi = '/home/datawork-lops-osi/aponte/'
 #
 root_data_dir = '/home/datawork-lops-osi/data/mit4320/'
 grid_dir = root_data_dir+'grid/'
+
+
+#------------------------------ mit specific ---------------------------------------
 
 #
 def get_compressed_level_index(grid_dir, index_fname='llc4320_compressed_level_index.nc', geometry='llc'):
@@ -221,3 +225,13 @@ def plot_scalar(v, colorbar=False, title=None, vmin=None, vmax=None, savefig=Non
         #
         if not offline:
             plt.show()
+
+#------------------------------ misc ---------------------------------------
+                        
+def getsize(dir_path):
+    ''' Returns the size of a directory in bytes
+    '''
+    process = os.popen('du -s '+dir_path)
+    size = int(process.read().split()[0]) # du returns kb
+    process.close()
+    return size*1e3            
