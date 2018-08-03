@@ -15,9 +15,9 @@ import xmitgcm as xm
 #------------------------------ paths ---------------------------------------
 
 #tmp = os.getenv('TMPDIR')
-datawork = os.getenv('DATAWORK')
-home = os.getenv('HOME')
-scratch = os.getenv('SCRATCH')
+datawork = os.getenv('DATAWORK')+'/'
+home = os.getenv('HOME')+'/'
+scratch = os.getenv('SCRATCH')+'/'
 osi = '/home/datawork-lops-osi/aponte/'
 #
 root_data_dir = '/home/datawork-lops-osi/data/mit4320/'
@@ -183,7 +183,7 @@ def iters_to_date(iters, delta_t=25.):
     dtime = [t0+dateutil.relativedelta.relativedelta(seconds=t) for t in ltime]    
     return dtime
 
-    
+
 #------------------------------ plot ---------------------------------------
 
 #
@@ -225,6 +225,162 @@ def plot_scalar(v, colorbar=False, title=None, vmin=None, vmax=None, savefig=Non
         #
         if not offline:
             plt.show()
+
+
+#------------------------------ zarr ---------------------------------
+
+def zarr(V, client, F=None, out_dir=None, compressor=None):
+    """ rechunk variables
+    
+    Parameters
+    ----------
+    V: list of str
+        variables to rechunk
+
+    face: list of int
+        faces to consider, default is all (0-12)
+        
+    out_dir: str
+        output directory
+        
+    """
+
+    if out_dir is None:
+        out_dir = scratch+'mit/standard/'
+
+    if F is None:
+        F = range(13)
+    elif type(F) is int:
+        F = [F]
+        
+    for v in V:
+        #
+        data_dir = root_data_dir+v+'/'
+        iters, time = get_iters_time(v, data_dir, delta_t=25.)
+        #
+        p = 'C'
+        if v is 'SSU':
+            p = 'W'
+        elif v is 'SSV':
+            p = 'S'
+        #
+        ds = get_compressed_data(v, data_dir, grid_dir, iters=iters, time=time, client=client, point=p)
+        #
+        # should store grid data independantly in a single file
+        ds = ds.drop(['XC','YC','Depth','rA'])
+        #
+        ds = ds.isel(face=F)
+        ds = ds.chunk({'face': 1})
+        #
+        dv = ds[v].to_dataset()
+        #
+        file_out = out_dir+'/%s.zarr'%(v)
+        try:
+            dv.to_zarr(file_out, mode='w')                    
+        except:
+            print('Failure')
+        dsize = getsize(file_out)
+        print(' %s converted to zarr,  data is %.1fGB ' %(v, dsize/1e9))
+
+        
+#------------------------------ rechunking ---------------------------------
+
+
+def rechunk(V, F=None, out_dir=None, Nt = 24*10, Nc = 96, compressor=None):
+    """ rechunk variables
+    
+    Parameters
+    ----------
+    V: list of str
+        variables to rechunk
+
+    F: list of int
+        faces to consider, default is all (0-12)
+        
+    out_dir: str
+        output directory
+        
+    Nt: int
+        temporal chunk size, default is 24x10
+    
+    Nc; int
+        i, j chunk size, default is 96 (96x45=4320)
+        
+    """
+
+    if out_dir is None:
+        out_dir = scratch+'mit/rechunked/'
+
+    if F is None:
+        F=range(13)
+    elif type(F) is int:
+        F = [F]
+        
+    Nt = len(ds.time) if Nt == 0 else Nt
+
+    for v in V:
+
+        file_in = scratch+'/mit/standard/%s.zarr'%(v)
+        ds0 = xr.open_zarr(file_in)
+
+        for face in F:
+
+            ds = ds0.isel(face=face)
+            #
+            ds = ds.isel(time=slice(len(ds.time)//Nt *Nt))
+            #
+            ds = ds.chunk({'time': Nt, 'i': Nc, 'j': Nc})
+            #
+            # tmp, xarray zarr backend bug: 
+            # https://github.com/pydata/xarray/issues/2278
+            del ds['face'].encoding['chunks']
+            del ds[v].encoding['chunks']
+
+            file_out = out_dir+'%s_f%02d.zarr'%(v,face)
+            try:
+                if compressor is 'default':
+                    ds.to_zarr(file_out, mode='w')
+                else:
+                    # specify compression:
+                    ds.to_zarr(file_out, mode='w', \
+                                encoding={key: {'compressor': compressor} for key in ds.variables})
+            except:
+                print('Failure')
+            dsize = getsize(file_out)
+            print(' %s face=%d  data is %.1fGB ' %(v, face, dsize/1e9))
+
+
+#------------------------------ spectrum ---------------------------------------
+            
+def _get_E(x, ufunc=True, **kwargs):
+    ax = -1 if ufunc else 0
+    #
+    dkwargs = {'window': 'hann', 'return_onesided': False, 
+               'detrend': 'linear', 'scaling': 'density'}
+    dkwargs.update(kwargs)
+    f, E = welch(x, fs=24., nperseg=Nb,  axis=ax, **dkwargs)
+    #
+    if ufunc:
+        return E
+    else:
+        return f, E
+
+def get_E(v, f=None, **kwargs):
+    v = v.chunk({'time': len(v.time)})
+    if 'nperseg' in kwargs:
+        Nb = kwargs['nperseg']
+    else:
+        Nb = 80*24
+    if f is None:
+        f, E = _get_E(v.values, ufunc=False, **kwargs)
+        return f, E
+    else:
+        E = xr.apply_ufunc(_get_E, v,
+                    dask='parallelized', output_dtypes=[np.float64],
+                    input_core_dims=[['time']],
+                    output_core_dims=[['freq_time']],
+                    output_sizes={'freq_time': Nb}, kwargs=kwargs)
+        return E.assign_coords(freq_time=f).sortby('freq_time')
 
 #------------------------------ misc ---------------------------------------
                         
