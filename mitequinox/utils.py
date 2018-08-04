@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from scipy.signal import welch
 import dask
 import xarray as xr
 import threading
@@ -358,7 +359,7 @@ def _get_E(x, ufunc=True, **kwargs):
     dkwargs = {'window': 'hann', 'return_onesided': False, 
                'detrend': 'linear', 'scaling': 'density'}
     dkwargs.update(kwargs)
-    f, E = welch(x, fs=24., nperseg=Nb,  axis=ax, **dkwargs)
+    f, E = welch(x, fs=24., axis=ax, **dkwargs)
     #
     if ufunc:
         return E
@@ -371,6 +372,7 @@ def get_E(v, f=None, **kwargs):
         Nb = kwargs['nperseg']
     else:
         Nb = 80*24
+        kwargs['nperseg']= Nb
     if f is None:
         f, E = _get_E(v.values, ufunc=False, **kwargs)
         return f, E
