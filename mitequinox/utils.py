@@ -230,7 +230,16 @@ def plot_scalar(v, colorbar=False, title=None, vmin=None, vmax=None, savefig=Non
 
 #------------------------------ zarr ---------------------------------
 
-def zarr(V, client, F=None, out_dir=None, compressor=None):
+
+def store_zarr(ds, filename, encoding):
+    # tmp, waiting for xarray release
+    for v in ds.variables:
+        if hasattr(ds[v],'encoding') and 'chunks' in ds[v].encoding:
+            del ds[v].encoding['chunks']    
+    #
+    ds.to_zarr(filename, mode='w', encoding=encoding)
+
+def zarr_std(V, client, F=None, out_dir=None, compressor=None):
     """ rechunk variables
     
     Parameters
@@ -265,12 +274,13 @@ def zarr(V, client, F=None, out_dir=None, compressor=None):
         elif v is 'SSV':
             p = 'S'
         #
-        ds = get_compressed_data(v, data_dir, grid_dir, iters=iters, time=time, client=client, point=p)
+        ds = get_compressed_data(v, data_dir, grid_dir, iters=iters, 
+                                 time=time, client=client, point=p)
         #
         # should store grid data independantly in a single file
         ds = ds.drop(['XC','YC','Depth','rA'])
         #
-        ds = ds.isel(face=F)
+        ds = ds.sel(face=F)
         ds = ds.chunk({'face': 1})
         #
         dv = ds[v].to_dataset()
@@ -304,8 +314,8 @@ def rechunk(V, F=None, out_dir=None, Nt = 24*10, Nc = 96, compressor=None):
     Nt: int
         temporal chunk size, default is 24x10
     
-    Nc; int
-        i, j chunk size, default is 96 (96x45=4320)
+    Nc; int, tuple
+        i, j chunk size, default is (96, 96) (96x45=4320)
         
     """
 
@@ -317,20 +327,23 @@ def rechunk(V, F=None, out_dir=None, Nt = 24*10, Nc = 96, compressor=None):
     elif type(F) is int:
         F = [F]
         
-    Nt = len(ds.time) if Nt == 0 else Nt
-
+    if type(Nc) is int:
+        Ni, Nj = Nc
+    elif type(Nc) is tuple:
+        Ni, Nj = Nc[0], Nc[1]
+        
     for v in V:
 
         file_in = scratch+'/mit/standard/%s.zarr'%(v)
         ds0 = xr.open_zarr(file_in)
-
+                
         for face in F:
 
-            ds = ds0.isel(face=face)
+            ds = ds0.sel(face=face)
             #
             ds = ds.isel(time=slice(len(ds.time)//Nt *Nt))
             #
-            ds = ds.chunk({'time': Nt, 'i': Nc, 'j': Nc})
+            ds = ds.chunk({'time': Nt, 'i': Ni, 'j': Nj})
             #
             # tmp, xarray zarr backend bug: 
             # https://github.com/pydata/xarray/issues/2278
