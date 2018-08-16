@@ -230,7 +230,6 @@ def plot_scalar(v, colorbar=False, title=None, vmin=None, vmax=None, savefig=Non
 
 #------------------------------ zarr ---------------------------------
 
-
 def store_zarr(ds, filename, encoding):
     # tmp, waiting for xarray release
     for v in ds.variables:
@@ -239,7 +238,7 @@ def store_zarr(ds, filename, encoding):
     #
     ds.to_zarr(filename, mode='w', encoding=encoding)
 
-def zarr_std(V, client, F=None, out_dir=None, compressor=None):
+def zarr_standard(V, client, F=None, out_dir=None, compressor=None):
     """ rechunk variables
     
     Parameters
@@ -287,7 +286,8 @@ def zarr_std(V, client, F=None, out_dir=None, compressor=None):
         #
         file_out = out_dir+'/%s.zarr'%(v)
         try:
-            dv.to_zarr(file_out, mode='w')                    
+            dv.to_zarr(file_out, mode='w', \
+                       encoding={key: {'compressor': compressor} for key in dv.variables})
         except:
             print('Failure')
         dsize = getsize(file_out)
@@ -295,7 +295,6 @@ def zarr_std(V, client, F=None, out_dir=None, compressor=None):
 
         
 #------------------------------ rechunking ---------------------------------
-
 
 def rechunk(V, F=None, out_dir=None, Nt = 24*10, Nc = 96, compressor=None):
     """ rechunk variables
