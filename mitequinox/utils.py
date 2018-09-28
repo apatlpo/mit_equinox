@@ -24,6 +24,7 @@ osi = '/home/datawork-lops-osi/aponte/'
 root_data_dir = '/home/datawork-lops-osi/data/mit4320/'
 grid_dir = root_data_dir+'grid/'
 
+#llc4320 = xm.utils.get_extra_metadata(domain='llc', nx=4320)
 
 #------------------------------ mit specific ---------------------------------------
 
@@ -35,7 +36,7 @@ def get_compressed_level_index(grid_dir, index_fname='llc4320_compressed_level_i
     ds = xm.open_mdsdataset('', grid_dir=grid_dir,
                              iters=None, geometry=geometry, read_grid=True,
                              default_dtype=np.dtype('>f4'),
-                             ignore_unknown_vars=True)
+                             ignore_unknown_vars=True) #, extra_metadata=llc4320)
     
     # get shape
     #nz, nface, ny, nx = ds.hFacC.shape
@@ -126,7 +127,11 @@ def get_compressed_data(varname, data_dir, grid_dir, ds_index=None, ds=None, ite
     
     # load mask from raw data
     hfac = xm.utils.read_mds(grid_dir + 'hFac' + point,
-                            use_mmap=True, dask_delayed=False, force_dict=False)
+                             use_mmap=True, dask_delayed=False, force_dict=False) 
+    #hfac = xm.utils.read_mds(grid_dir + 'hFac' + point, llc=True,
+    #                         use_mmap=True, use_dask=False, extra_metadata=llc4320)['hFac' + point]
+    #                        use_mmap=True, use_dask=False, force_dict=False)['hFac' + point]
+    #hfac = xm.utils.read_3d_llc_data(grid_dir + 'hFac'+point+'.data', 90, 4320, dtype='>f4', memmap=True)
     mask = hfac[k]>0
     if client is None:
         mask_future = mask
@@ -137,7 +142,15 @@ def get_compressed_data(varname, data_dir, grid_dir, ds_index=None, ds=None, ite
                             (data_dir, varname, i, offset, count, mask_future, shape, dtype)
                             for i in iters], axis=0)
 
-    ds[varname] = xr.Variable(['time', 'face', 'j', 'i'], data)   
+    if point is 'C':
+        dims = ['time', 'face', 'j', 'i']
+    elif point is 'W':
+        dims = ['time', 'face', 'j', 'i_g']
+    elif point is 'S':
+        dims = ['time', 'face', 'j_g', 'i']    
+    
+    ds[varname] = xr.Variable(dims, data)   
+    
     if time is not None:
         ds['time'] = time.sel(iters=iters).values
         #ds['dtime'] = iters_to_date(iters)
@@ -227,7 +240,28 @@ def plot_scalar(v, colorbar=False, title=None, vmin=None, vmax=None, savefig=Non
         if not offline:
             plt.show()
 
-
+#
+def quick_llc_plot(data, axis_off=False, **kwargs):
+    face_to_axis = {0: (2, 0), 1: (1, 0), 2: (0, 0),
+                    3: (2, 1), 4: (1, 1), 5: (0, 1),
+                    7: (0, 2), 8: (1, 2), 9: (2, 2),
+                    10: (0, 3), 11: (1, 3), 12: (2, 3)}
+    transpose = [7, 8, 9, 10, 11, 12]
+    gridspec_kw = dict(left=0, bottom=0, right=1, top=1, wspace=0, hspace=0)
+    fig, axes = plt.subplots(nrows=3, ncols=4, gridspec_kw=gridspec_kw)
+    for face, (j, i) in face_to_axis.items():
+        data_ax = data.sel(face=face)
+        ax = axes[j,i]
+        yincrease = True
+        if face in transpose:
+            data_ax = data_ax.transpose()
+            yincrease = False
+        data_ax.plot(ax=ax, yincrease=yincrease, **kwargs)
+        if axis_off:
+            ax.axis('off')
+        ax.set_title('')
+            
+            
 #------------------------------ zarr ---------------------------------
 
 def store_zarr(ds, filename, encoding):
