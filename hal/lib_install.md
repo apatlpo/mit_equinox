@@ -1,4 +1,4 @@
-
+# install of xarray/dask and other on HAL
 
 In order to have internet access you need to set:
 ```
@@ -24,9 +24,9 @@ conda create -n equinox -c conda-forge python=3.6
 conda activate equinox
 conda install dask xarray jupyterlab cartopy python-graphviz
 conda install -c conda-forge dask-jobqueue zarr spectrum
-#pip install --cert /etc/pki/tls/certs/ca-bundle.crt dask-jobqueue
-#pip install --cert /etc/pki/tls/certs/ca-bundle.crt zarr
-pip install --cert /etc/pki/tls/certs/ca-bundle.crt  cmocean --user
+pip install --cert /etc/pki/tls/certs/ca-bundle.crt git+https://github.com/apatlpo/xmitgcm.git@angles --user
+pip install --cert /etc/pki/tls/certs/ca-bundle.crt git+https://github.com/xgcm/xgcm.git --user
+pip install --cert /etc/pki/tls/certs/ca-bundle.crt cmocean --user
 git clone https://github.com/apatlpo/mit_equinox.git
 cd mit_equinox
 pip install -e . --user
@@ -38,19 +38,17 @@ module load conda
 conda activate equinox
 ipython kernel install --user --name equinox
 ```
-[wiki](https://gitlab.cnes.fr/inno/rt-nouvelles-technos-distrib/blob/master/doc/utilisation_hub.rst)
+See help on HAL [wiki](https://gitlab.cnes.fr/inno/rt-nouvelles-technos-distrib/blob/master/doc/utilisation_hub.rst)
 
-netcdf4 was not installed
-we may need to redo a clean install
-
-`wget https://raw.githubusercontent.com/apatlpo/iwave_sst/master/doc/cartopy_download.py`
-
-Install mit_equinox:
+netcdf4 was installed afterwards, may need to do it at the same time than dask-jobqueue:
 ```
-pip install -e . --user
+conda install -c conda-forge netcdf4
 ```
+(we may need to redo a clean install)
 
-Install latest xarray code and h5netcdf:
+cartopy coastlines need to be downloaded and massaged, see `cartopy/log.md`
+
+Optional (for testing): install latest xarray code and h5netcdf:
 ```
 conda uninstall xarray --force
 pip install --cert /etc/pki/tls/certs/ca-bundle.crt https://github.com/pydata/xarray/archive/master.zip --user

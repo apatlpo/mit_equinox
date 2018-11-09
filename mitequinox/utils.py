@@ -41,7 +41,14 @@ except:
 
 #------------------------------ mit specific ---------------------------------------
 
-def load_grdnc(V=None):
+def load_grd(V=None, ftype='zarr'):
+    if ftype is 'zarr':
+        return xr.open_zarr(root_data_dir+'grid.zarr')
+    elif ftype is 'nc':
+        return load_grdnc(V)
+    
+
+def load_grdnc(V):
     _hasface = ['CS', 'SN', 'Depth', 
                 'dxC', 'dxG', 'dyC', 'dyG', 
                 'hFacC', 'hFacS', 'hFacW', 
@@ -63,8 +70,9 @@ def load_grdnc(V=None):
 def load_datanc(v, suff='_t*', files=None, **kwargs):
     #
     if type(v) is list:
-        ds = xr.merge([load_datanc(v1, suff=suff, **kwargs) for v1 in v]
-                        , compat='equals')
+        #ds = xr.merge([load_datanc(v1, suff=suff, **kwargs) for v1 in v]
+        #                , compat='equals')
+        ds = [load_datanc(v1, suff=suff, **kwargs) for v1 in v]
     else:
         default_kwargs = {'concat_dim': 'time',
                           'compat': 'equals', 
@@ -108,4 +116,12 @@ def getsize(dir_path):
     process = os.popen('du -s '+dir_path)
     size = int(process.read().split()[0]) # du returns kb
     process.close()
-    return size*1e3            
+    return size*1e3
+
+def rotate(u,v,ds):
+    # rotate from grid to zonal/meridional directions
+    return (u*ds.CS-v*ds.SN, u*ds.SN+v*ds.CS)
+    
+    
+    
+
