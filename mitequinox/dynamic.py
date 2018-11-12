@@ -15,7 +15,6 @@ import xmitgcm as xm
 
 from .utils import *
 
-g = 9.81
 
 #------------------------------ momentum balance -----------------------------------
 

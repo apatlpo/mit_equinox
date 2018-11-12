@@ -2,13 +2,12 @@
 
 In order to have internet access you need to set:
 ```
-export http_proxy='http://eynardg:SWOTIfremer2018@surf.loc.cnes.fr:8050'
-export https_proxy="$http_proxy"
+# ask aurelien
 ```
 
 In order to pull and push from/to github, you need to run once:
 ```
-git config --global http.proxy http://eynardg:SWOTIfremer2018@surf.loc.cnes.fr:8050
+# ask aurelien
 ```
 
 For conda, you need to deactivate ssl in .condarc:
