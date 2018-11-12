@@ -1,19 +1,11 @@
-import os
-import numpy as np
-from scipy.signal import welch
-import dask
-import xarray as xr
 import threading
 
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
+import cartopy.feature as cfeature
 from cmocean import cm
 
-import datetime, dateutil
-
-import xmitgcm as xm
-
-from .utils import *
+#from .utils import *
 
 #------------------------------ plot ---------------------------------------
 
@@ -38,7 +30,6 @@ def plot_scalar(v, colorbar=False, title=None, vmin=None, vmax=None, savefig=Non
         try:
             im = v.plot.pcolormesh(ax=ax, transform=ccrs.PlateCarree(), vmin=vmin, vmax=vmax,
                                    x='XC', y='YC', add_colorbar=colorbar, cmap=cmap)
-            #im = v.plot.pcolormesh(ax=ax, add_colorbar=False, cmap=cmap)
             fig.colorbar(im)
             gl=ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=True, linewidth=2, color='k', 
                             alpha=0.5, linestyle='--')
@@ -78,5 +69,69 @@ def quick_llc_plot(data, axis_off=False, **kwargs):
         if axis_off:
             ax.axis('off')
         ax.set_title('')
+    return fig, axes
             
-        
+
+def plot_pretty(v, colorbar=False, title=None, vmin=None, vmax=None, savefig=None, 
+                offline=False, coast_resolution='110m', figsize=(15,5), cmmap='thermal',
+                ignore_face=[]):
+    # should add projection as an input
+    # should allow for zooms: atlantic, pacific, north-atlantic, ...
+    #
+    if vmin is None:
+        vmin = v.min()
+    if vmax is None:
+        vmax = v.max()
+    #
+    MPL_LOCK = threading.Lock()
+    with MPL_LOCK:
+        if offline:
+            plt.switch_backend('agg')
+        #
+        fig = plt.figure(figsize=figsize)
+        #ax = fig.add_subplot(111, projection=ccrs.PlateCarree())
+        #ax = fig.add_subplot(111, projection=ccrs.Robinson())
+        ax = fig.add_subplot(111, projection=ccrs.Mollweide())
+        #ax.set_extent([-180,180,-60,60])
+        #ax = fig.add_subplot(111)
+        # add colors over land:
+        #ax.stock_img()
+        cmap = getattr(cm, cmmap)
+        gen = (face for face in v.face.values if face not in ignore_face)
+        for face in gen:
+            vplt = v.sel(face=face)
+            if face in [6,7,8,9]:
+                # this deals with dateline crossing areas
+                im = vplt.where( (vplt.XC>0) & (vplt.XC<179.)).plot.pcolormesh(ax=ax,                   
+                                transform=ccrs.PlateCarree(), vmin=vmin, vmax=vmax,
+                                x='XC', y='YC', add_colorbar=colorbar, cmap=cmap)
+                im = vplt.where(vplt.XC<0).plot.pcolormesh(ax=ax,                   
+                                transform=ccrs.PlateCarree(), vmin=vmin, vmax=vmax,
+                                x='XC', y='YC', add_colorbar=colorbar, cmap=cmap)
+            else:
+                im = vplt.plot.pcolormesh(ax=ax,                   
+                                transform=ccrs.PlateCarree(), vmin=vmin, vmax=vmax,
+                                x='XC', y='YC', add_colorbar=colorbar, cmap=cmap)
+                #im = v.plot.pcolormesh(ax=ax, add_colorbar=False, cmap=cmap)
+        fig.colorbar(im)
+        # grid lines:
+        ax.gridlines()
+        # only with platecarre
+        #gl=ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=True, linewidth=2, color='k', 
+        #                alpha=0.5, linestyle='--')
+        #gl.xlabels_top = False
+        # coastlines and land:
+        if coast_resolution is not None:
+            ax.coastlines(resolution=coast_resolution, color='k')
+        ax.add_feature(cfeature.LAND)
+        #
+        if title is not None:
+            ax.set_title(title)
+        #
+        if savefig is not None:
+            fig.savefig(savefig, dpi=150)
+            plt.close(fig)
+        #
+        if not offline:
+            plt.show()
+

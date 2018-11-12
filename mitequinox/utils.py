@@ -6,9 +6,13 @@ from pandas import DataFrame
 
 import datetime, dateutil
 
+
+#------------------------------ parameters -------------------------------------
+
+g = 9.81
+omega_earth = 2.*np.pi/86164
+
 #------------------------------ paths ---------------------------------------
-
-
 
 # datarmor
 try:
@@ -46,7 +50,6 @@ def load_grd(V=None, ftype='zarr'):
         return xr.open_zarr(root_data_dir+'grid.zarr')
     elif ftype is 'nc':
         return load_grdnc(V)
-    
 
 def load_grdnc(V):
     _hasface = ['CS', 'SN', 'Depth', 
@@ -67,30 +70,38 @@ def load_grdnc(V):
             objs.append(xr.open_dataset(f))
     return xr.merge(objs, compat='equals').set_coords(names=gv)
 
-def load_datanc(v, suff='_t*', files=None, **kwargs):
-    #
-    if type(v) is list:
-        #ds = xr.merge([load_datanc(v1, suff=suff, **kwargs) for v1 in v]
-        #                , compat='equals')
-        ds = [load_datanc(v1, suff=suff, **kwargs) for v1 in v]
+def load_data(V, ftype='zarr', **kwargs):
+    if type(V) is list:
+        #return xr.merge([load_data(v, ftype=ftype, **kwargs) for v in V]
+        #               , compat='equals')
+        return [load_data(v, ftype=ftype, **kwargs) for v in V]
     else:
-        default_kwargs = {'concat_dim': 'time',
-                          'compat': 'equals', 
-                          'chunks': {'face':1, 'i': 480, 'j':480}}
-        if v is 'SSU':
-            default_kwargs['chunks'] = {'face':1, 'i_g': 480, 'j':480}
-        elif v is 'SSV':
-            default_kwargs['chunks'] = {'face':1, 'i': 480, 'j_g':480}            
-        default_kwargs.update(kwargs)
-        #
-        files_in = root_data_dir+v+'/'+v+suff
-        if files is not None:
-            files_in = files        
-        ds = xr.open_mfdataset(files_in, 
-                               **default_kwargs)
-        ds = ds.assign_coords(dtime=xr.DataArray(iters_to_date(ds.iters), 
-                                                 coords=[ds.time], 
-                                                 dims=['time']))        
+        if ftype is 'zarr':
+            return load_data_zarr(V, **kwargs)
+        elif ftype is 'nc':
+            return load_data_nc(V, **kwargs)
+
+def load_data_zarr(v, suffix='_std'):
+    return xr.open_zarr(work_data_dir+'rechunked/'+v+suffix+'.zarr')
+
+def load_data_nc(v, suff='_t*', files=None, **kwargs):
+    default_kwargs = {'concat_dim': 'time',
+                      'compat': 'equals', 
+                      'chunks': {'face':1, 'i': 480, 'j':480}}
+    if v is 'SSU':
+        default_kwargs['chunks'] = {'face':1, 'i_g': 480, 'j':480}
+    elif v is 'SSV':
+        default_kwargs['chunks'] = {'face':1, 'i': 480, 'j_g':480}            
+    default_kwargs.update(kwargs)
+    #
+    files_in = root_data_dir+v+'/'+v+suff
+    if files is not None:
+        files_in = files        
+    ds = xr.open_mfdataset(files_in, 
+                           **default_kwargs)
+    ds = ds.assign_coords(dtime=xr.DataArray(iters_to_date(ds.iters), 
+                                             coords=[ds.time], 
+                                             dims=['time']))        
     return ds
 
 def load_iters_date_files(v='Eta'):
@@ -108,6 +119,16 @@ def iters_to_date(iters, delta_t=25.):
     dtime = [t0+dateutil.relativedelta.relativedelta(seconds=t) for t in ltime]    
     return dtime
 
+def load_common_timeline(V, verbose=True):
+    df = load_iters_date_files(V[0]).rename(columns={'file': 'file_'+V[0]})
+    for v in V[1:]:
+        ldf = load_iters_date_files(v)
+        ldf = ldf.rename(columns={'file': 'file_'+v})
+        df = df.join(ldf['file_'+v], how='inner')
+    if verbose:
+        print(df.index[0], ' to ', df.index[-1])
+    return df
+
 #------------------------------ misc ---------------------------------------
                         
 def getsize(dir_path):
@@ -120,7 +141,7 @@ def getsize(dir_path):
 
 def rotate(u,v,ds):
     # rotate from grid to zonal/meridional directions
-    return (u*ds.CS-v*ds.SN, u*ds.SN+v*ds.CS)
+    return u*ds.CS-v*ds.SN, u*ds.SN+v*ds.CS
     
     
     
