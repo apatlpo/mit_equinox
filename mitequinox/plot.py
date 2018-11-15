@@ -7,11 +7,16 @@ from cmocean import cm
 
 #from .utils import *
 
+
+_default_cmaps = {'SSU': cm.balance, 'SSV': cm.balance, 
+           'Eta': plt.get_cmap('RdGy_r'), 
+           'SST': cm.thermal, 'SSS': cm.haline}
+
 #------------------------------ plot ---------------------------------------
 
 #
 def plot_scalar(v, colorbar=False, title=None, vmin=None, vmax=None, savefig=None, 
-                offline=False, coast_resolution='110m', figsize=(10,10), cmmap='thermal'):
+                offline=False, coast_resolution='110m', figsize=(10,10), cmap=None):
     #
     if vmin is None:
         vmin = v.min()
@@ -25,8 +30,11 @@ def plot_scalar(v, colorbar=False, title=None, vmin=None, vmax=None, savefig=Non
         #
         fig = plt.figure(figsize=figsize)
         ax = fig.add_subplot(111, projection=ccrs.PlateCarree())
-        #ax = fig.add_subplot(111)
-        cmap = getattr(cm, cmmap)
+        if cmap is None and v.name in _default_cmaps:
+            cmap = _default_cmaps() 
+        else:
+            cmap=plt.get_cmap('magma')
+        
         try:
             im = v.plot.pcolormesh(ax=ax, transform=ccrs.PlateCarree(), vmin=vmin, vmax=vmax,
                                    x='XC', y='YC', add_colorbar=colorbar, cmap=cmap)
