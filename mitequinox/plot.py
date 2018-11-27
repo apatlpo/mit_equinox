@@ -17,7 +17,9 @@ _default_cmaps = {'SSU': cm.balance, 'SSV': cm.balance,
 
 def _get_cmap(v, cmap):
     if cmap is None and v.name in _default_cmaps:
-        return _default_cmaps[v.name] 
+        return _default_cmaps[v.name]
+    elif cmap is not None:
+        return cmap
     else:
         return plt.get_cmap('magma')
 
@@ -120,6 +122,7 @@ def plot_pretty(v, colorbar=False, title=None, vmin=None, vmax=None, savefig=Non
         else:
             gen = (face for face in v.face.values if face not in ignore_face)
             _projection = ccrs.Robinson()
+            _extent = None
         if extent is not None:
             _extent = extent
         if projection is not None:
@@ -127,22 +130,24 @@ def plot_pretty(v, colorbar=False, title=None, vmin=None, vmax=None, savefig=Non
         #
         fig = plt.figure(figsize=figsize)
         ax = fig.add_subplot(111, projection=_projection)
-        ax.set_extent(_extent)
+        if _extent is not None:
+            ax.set_extent(_extent)
         for face in gen:
             vplt = v.sel(face=face)
             if face in [6,7,8,9]:
                 # this deals with dateline crossing areas
                 im = vplt.where( (vplt.XC>0) & (vplt.XC<179.)).plot.pcolormesh(ax=ax,
                                 transform=ccrs.PlateCarree(), vmin=vmin, vmax=vmax,
-                                x='XC', y='YC', cmap=colmap)
+                                x='XC', y='YC', cmap=colmap, add_colorbar=False)
                 im = vplt.where(vplt.XC<0).plot.pcolormesh(ax=ax,                   
                                 transform=ccrs.PlateCarree(), vmin=vmin, vmax=vmax,
-                                x='XC', y='YC', cmap=colmap)
+                                x='XC', y='YC', cmap=colmap, add_colorbar=False)
             else:
                 im = vplt.plot.pcolormesh(ax=ax,                   
                                 transform=ccrs.PlateCarree(), vmin=vmin, vmax=vmax,
-                                x='XC', y='YC', cmap=colmap)
-        fig.colorbar(im)
+                                x='XC', y='YC', cmap=colmap, add_colorbar=False)
+        if colorbar:
+            fig.colorbar(im)
         # grid lines:
         gl = ax.gridlines()
         #ax.set_xticks([0, 60, 120, 180, 240, 300, 360], crs=ccrs.PlateCarree())
