@@ -87,7 +87,8 @@ def load_data_zarr(v, suffix='_std'):
 def load_data_nc(v, suff='_t*', files=None, **kwargs):
     default_kwargs = {'concat_dim': 'time',
                       'compat': 'equals', 
-                      'chunks': {'face':1, 'i': 480, 'j':480}}
+                      'chunks': {'face':1, 'i': 480, 'j':480},
+                      'parallel': True}
     if v is 'SSU':
         default_kwargs['chunks'] = {'face':1, 'i_g': 480, 'j':480}
     elif v is 'SSV':
