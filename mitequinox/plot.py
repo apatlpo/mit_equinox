@@ -99,7 +99,7 @@ _region_params = {'atlantic': {'faces':[0,1,2,6,10,11,12],'extent':[-110,25,-70,
 
 def plot_pretty(v, colorbar=False, title=None, vmin=None, vmax=None, savefig=None, 
                 offline=False, coast_resolution='110m', figsize=(15,15), cmap=None,
-                ignore_face=[], projection=None, extent=None, region=None):
+                ignore_face=[], projection=None, extent=None, region=None, colorbar_kwargs={}):
     #
     if vmin is None:
         vmin = v.min()
@@ -147,7 +147,7 @@ def plot_pretty(v, colorbar=False, title=None, vmin=None, vmax=None, savefig=Non
                                 transform=ccrs.PlateCarree(), vmin=vmin, vmax=vmax,
                                 x='XC', y='YC', cmap=colmap, add_colorbar=False)
         if colorbar:
-            fig.colorbar(im)
+            fig.colorbar(im, **colorbar_kwargs)
         # grid lines:
         gl = ax.gridlines()
         #ax.set_xticks([0, 60, 120, 180, 240, 300, 360], crs=ccrs.PlateCarree())

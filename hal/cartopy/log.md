@@ -12,19 +12,26 @@ and dowload files:
 wget https://www.ngdc.noaa.gov/mgg/shorelines/data/gshhs/oldversions/version2.2.0/GSHHS_shp_2.2.0.zip
 wget http://naciscdn.org/naturalearth/110m/physical/ne_110m_coastline.zip
 ...
-```
+``
 
 Unzip, move and rename in ipython with:
+
 ```
- %run move_and_rename.py  ne_110m_coastline.zip
- %run move_and_rename.py  ne_10m_coastline.zip
- %run move_and_rename.py  ne_50m_coastline.zip
+%run move_and_rename.py  ne_110m_coastline.zip
+%run move_and_rename.py  ne_10m_coastline.zip
+%run move_and_rename.py  ne_50m_coastline.zip
+%run move_and_rename.py  ne_110m_ocean.zip
+%run move_and_rename.py  ne_10m_ocean.zip
+%run move_and_rename.py  ne_50m_ocean.zip
+%run move_and_rename.py  ne_110m_land.zip
+%run move_and_rename.py  ne_10m_land.zip
+%run move_and_rename.py  ne_50m_land.zip
 ```
 
 Check that it is working:
 ``` 
 in ipython (qsub -I -X)
-In [1]: %run cartopy/features.py
+In [1]: %run features.py
 ```
 
 Logs:
