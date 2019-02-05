@@ -1,5 +1,13 @@
 # install of xarray/dask and other on HAL
 
+You need to add the following lines to `.bashrc`:
+```
+. /work/logiciels/rh7/conda/4.5.4/etc/profile.d/conda.sh
+# conda activate equinox
+# uncomment the line above once the equinox conda environment is created
+```
+Do NOT add a `module load conda` line to `.bashrc`.
+
 In order to have internet access you need to set:
 ```
 # ask aurelien
@@ -10,7 +18,7 @@ In order to pull and push from/to github, you need to run once:
 # ask aurelien
 ```
 
-For conda, you need to deactivate ssl in .condarc:
+For conda, you need to deactivate ssl in `.condarc`:
 ```
 cat ~/.condarc
 ssl_verify: false
@@ -18,7 +26,7 @@ ssl_verify: false
 
 This is what was installed:
 ```
-module load conda
+#module load conda
 conda create -n equinox -c conda-forge python=3.6 
 conda activate equinox
 conda install -c conda-forge  dask xarray jupyterlab cartopy python-graphviz dask-jobqueue zarr netcdf4 spectrum seaborn
