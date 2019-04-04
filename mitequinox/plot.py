@@ -147,7 +147,9 @@ def plot_pretty(v, colorbar=False, title=None, vmin=None, vmax=None, savefig=Non
                                 transform=ccrs.PlateCarree(), vmin=vmin, vmax=vmax,
                                 x='XC', y='YC', cmap=colmap, add_colorbar=False)
         if colorbar:
-            fig.colorbar(im, **colorbar_kwargs)
+            cbar = fig.colorbar(im, **colorbar_kwargs)
+        else:
+            cbar = None
         # grid lines:
         gl = ax.gridlines()
         #ax.set_xticks([0, 60, 120, 180, 240, 300, 360], crs=ccrs.PlateCarree())
@@ -176,4 +178,4 @@ def plot_pretty(v, colorbar=False, title=None, vmin=None, vmax=None, savefig=Non
         #
         #if not offline:
         #    plt.show()
-        return fig, ax
+        return {'fig': fig, 'ax': ax, 'cbar': cbar}
