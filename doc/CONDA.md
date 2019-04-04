@@ -19,6 +19,7 @@ pip install git+https://github.com/apatlpo/UTide.git
 pip install cmocean
 cd mit_equinox; pip install -e .
 cp datarmor/jobqueue.yaml datarmor/distributed.yaml ~/.config/dask/
+conda install  -c conda-forge scikit-learn
 ```
 
 In order to add the environnement to kernels available to jupyter, you need to run:
