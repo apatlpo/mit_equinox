@@ -4,6 +4,7 @@ hal/lib_install_proxy.md
 clean~
 clean
 *.swp
+.DS_Store
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -20,6 +21,7 @@ __pycache__/
 
 # data files
 *.nc
+*.zarr
 
 # fig and movies
 *.png
@@ -45,4 +47,4 @@ jlab.pbs.o*
 *.log
 *.nodefile
 
-
+sandbox/data
