@@ -57,7 +57,7 @@ def load_level_from_3D_field(data_dir, varname, inum, offset, count, mask, dtype
     data_blank = np.full_like(mask, np.nan, dtype='f4')
     data_blank[mask] = data
     data_blank.shape = mask.shape
-    data_llc = xm.utils._reshape_llc_data(data_blank, jdim=0).compute(get=dask.get)
+    data_llc = xm.utils._reshape_llc_data(data_blank, jdim=0).compute(scheduler=dask.get)
     data_llc.shape = (1,) + data_llc.shape
     return data_llc
 

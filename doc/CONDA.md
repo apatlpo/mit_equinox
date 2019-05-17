@@ -9,17 +9,19 @@ bash Miniconda3-latest-Linux-x86_64.sh
 bash
 conda update conda
 conda create -n equinox -c conda-forge python=3.6 dask dask-jobqueue \
-            xarray jupyterlab cartopy zarr python-graphviz spectrum 
+            xarray jupyterlab cartopy zarr python-graphviz spectrum \
+            geopandas scikit-learn netcdf4
 conda activate equinox
 pip install git+https://github.com/apatlpo/xmitgcm.git@angles
+# this should not be necessary:
+conda install -c conda-forge future numba
 pip install git+https://github.com/xgcm/xgcm.git
 pip install git+https://github.com/rabernat/xrft.git
 pip install git+https://github.com/apatlpo/xscale.git
 pip install git+https://github.com/apatlpo/UTide.git
-pip install cmocean
+conda install -c conda-forge cmocean
 cd mit_equinox; pip install -e .
 cp datarmor/jobqueue.yaml datarmor/distributed.yaml ~/.config/dask/
-conda install  -c conda-forge scikit-learn
 ```
 
 In order to add the environnement to kernels available to jupyter, you need to run:
