@@ -1,1 +1,1 @@
-__all__ = ['utils', 'binary', 'rw', 'plot', 'sigp']
+__all__ = ['utils', 'binary', 'rw', 'plot', 'sigp','drifters']

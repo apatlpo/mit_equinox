@@ -6,9 +6,9 @@ import geopandas
 
 
 
-def load_pair(p):
-    d0, id0 = pickle.load(open(data_dir+'drifters/%d.p'%p[0], 'rb'))
-    d1, id1 = pickle.load(open(data_dir+'drifters/%d.p'%p[1], 'rb'))
+def load_pair(p, data_dir):
+    d0, id0 = pickle.load(open(data_dir+'single/%09d.p'%p[0], 'rb'))
+    d1, id1 = pickle.load(open(data_dir+'single/%09d.p'%p[1], 'rb'))
     # get rid of gaps and interpolate if necessary
     d0 = d0[~pd.isnull(d0.index)]
     d1 = d1[~pd.isnull(d1.index)]
