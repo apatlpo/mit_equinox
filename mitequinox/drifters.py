@@ -4,7 +4,9 @@ import numpy as np
 import pandas as pd
 import geopandas
 
+from functools import partial
 
+#--------------------------------------  pair I/O ------------------------------------------------
 
 def load_pair(p, data_dir):
     d0, id0 = pickle.load(open(data_dir+'single/%09d.p'%p[0], 'rb'))
@@ -27,7 +29,59 @@ def load_pair(p, data_dir):
     gd1 = to_gdataframe(d1)
     return gd0, gd1, p
 
+#--------------------------------------  binning ------------------------------------------------
 
+# leverages apply_ufunc with numpy binning code
+# https://github.com/pydata/xarray/issues/2817
+# an alternative would be to create xarray dataarrays and use groupby_bins
+# https://github.com/pydata/xarray/issues/1765
+
+def _bin1d(bins, v, vbin, weights=True):
+
+    if weights:
+        w = v
+    else:
+        w = np.ones_like(v)
+    h, edges = np.histogram(vbin, bins=bins, weights=w, density=False)
+    return h[None,:]
+
+def bin1d(v, vbin, bins, weights, bin_dim='bin_dim', name='binned_array'):
+    # wrapper around apply_ufunc
+    dims = ['TIME'] # core dim
+    bins_c = (bins[:-1]+bins[1:])*.5
+    out = xr.apply_ufunc(partial(_bin1d, bins), v, vbin, kwargs={'weights': weights},
+                    output_core_dims=[[bin_dim]], output_dtypes=[np.float64], 
+                    dask='parallelized',
+                    input_core_dims=[dims, dims],
+                    output_sizes={bin_dim: len(bins_c)})
+    out = out.assign_coords(**{bin_dim: bins_c}).rename(name)
+    return out
+
+def _bin2d(bins1, bins2, v, vbin1, vbin2, weights=True):
+    # wrapper around apply_ufunc
+    if weights:
+        w = v
+    else:
+        w = np.ones_like(v)
+    h, edges1, edges2 = np.histogram2d(vbin1.flatten(), vbin2.flatten(), 
+                                       bins=[bins1, bins2], weights=w.flatten(), density=False)
+    return h[None,...]
+
+def bin2d(v, vbin1, bins1, vbin2, bins2, weights, 
+          bin_dim1='bin_dim1', bin_dim2='bin_dim2', name='binned_array'):
+    # wrapper around apply_ufunc
+    dims = ['TIME'] # core dim
+    bins1_c = (bins1[:-1]+bins1[1:])*.5
+    bins2_c = (bins2[:-1]+bins2[1:])*.5
+    out = xr.apply_ufunc(partial(_bin2d, bins1, bins2), v, vbin1, vbin2, 
+                       kwargs={'weights': weights},
+                       output_core_dims=[[bin_dim1,bin_dim2]], output_dtypes=[np.float64], 
+                       dask='parallelized',
+                       input_core_dims=[dims, dims, dims],
+                       output_sizes={bin_dim1: len(bins1_c), bin_dim2: len(bins2_c)})
+    out = out.assign_coords(**{bin_dim1: bins1_c, bin_dim2: bins2_c}).rename(name)
+    return out
+    
 #--------------------------------------  utils ------------------------------------------------
 
 
@@ -47,11 +101,8 @@ def haversine(lon1, lat1, lon2, lat2):
                                    np.cos(llat1) * np.cos(llat2) * (np.sin((llon2 - llon1) / 2)) ** 2))
     return arclen * RADIUS_EARTH
 
-
-
 # geodesy with vectors
 # https://www.movable-type.co.uk/scripts/latlong-vectors.html
-    
 def compute_vector(*args, lon_key='LON', lat_key='LAT'):
     if len(args)==1:
         df = args[0]
@@ -69,7 +120,8 @@ def drop_vector(*args, v0='v0', v1='v1', v2='v2'):
     else:
         return [df.drop(columns=[v0,v1,v2]) for df in args]
     
-def compute_lonlat(*args, dropv=True, v0='v0', v1='v1', v2='v2',
+def compute_lonlat(*args, dropv=True, 
+                   v0='v0', v1='v1', v2='v2',
                    lon_key='LON', lat_key='LAT'):
     if len(args)==1:
         df = args[0]
