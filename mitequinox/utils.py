@@ -10,7 +10,15 @@ import datetime, dateutil
 #------------------------------ parameters -------------------------------------
 
 g = 9.81
-omega_earth = 2.*np.pi/86164
+omega_earth = 2.*np.pi/86164.0905
+deg2rad = np.pi/180.
+
+def coriolis(lat, signed=False):
+    if signed:
+        return 2.*omega_earth*np.sin(lat*deg2rad)
+    else:
+        return 2.*omega_earth*np.sin(np.abs(lat)*deg2rad)
+        
 
 #------------------------------ paths ---------------------------------------
 
@@ -39,6 +47,7 @@ try:
     work_data_dir = '/work/ALT/swot/aval/syn/'
     #grid_dir = root_data_dir+'grid/'
     #grid_dir_nc = root_data_dir+'grid_nc/'
+    enatl60_data_dir = '/work/ALT/odatis/eNATL60/'
 except:
     pass
 
@@ -146,4 +155,8 @@ def rotate(u,v,ds):
     
     
     
+#------------------------------ enatl60 specific ---------------------------------------
+
+
+
 

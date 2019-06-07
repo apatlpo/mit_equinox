@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from scipy.signal import welch
+from scipy import signal
 import dask
 import xarray as xr
 import threading
@@ -11,11 +11,48 @@ from cmocean import cm
 
 import datetime, dateutil
 
-import xmitgcm as xm
+#import xmitgcm as xm
 
 from .utils import *
 
+#------------------------------ temporal filters ---------------------------------------
 
+def gen_filter(band, numtaps=24*10, dt=1., lat=None, domega=None, ndomega=None):
+    ''' Wrapper around scipy.signal.firwing
+    dt: float
+        hours
+    '''
+    params = {}
+    pass_zero = False
+    if band=='semidiurnal':
+        omega = 1/12.
+    elif band=='diurnal':
+        omega = 1/24.
+    elif band=='inertial':
+        try:
+            omega = coriolis(lat)*3600/2./np.pi
+        except:
+            print('latitude needs to be provided to gen_filter')
+    #
+    if domega is not None:
+        cutoff = [omega-domega, omega+domega]
+    elif ndomega is not None:
+        cutoff = [omega*(1-ndomega), omega*(1.+ndomega)]
+    elif band is not 'subdiurnal':
+        print('domega or ndomega needs to be provided to gen_filter')
+    #
+    if band=='subdiurnal':
+        pass_zero = True
+        cutoff = [1./30.]
+    h = signal.firwin(numtaps, cutoff=cutoff, pass_zero=pass_zero, 
+                      nyq=1./2/dt, scale=True)
+    return h
+        
+def filter_response(h, dt=1.):
+    ''' Returns the frequency response
+    '''
+    w, hh = signal.freqz(h, worN=8000)
+    return hh, (w/np.pi)/2/dt*24
 
 #------------------------------ spectrum ---------------------------------------
           
@@ -35,7 +72,7 @@ def _get_E(x, ufunc=True, **kwargs):
     dkwargs = {'window': 'hann', 'return_onesided': False, 
                'detrend': 'linear', 'scaling': 'density'}
     dkwargs.update(kwargs)
-    f, E = welch(x, fs=24., axis=ax, **dkwargs)
+    f, E = signal.welch(x, fs=24., axis=ax, **dkwargs)
     #
     if ufunc:
         return E

@@ -3,6 +3,7 @@ import pickle
 import numpy as np
 import pandas as pd
 import geopandas
+import xarray as xr
 
 from functools import partial
 
