@@ -2,7 +2,8 @@ import os
 from glob import glob
 import numpy as np
 import xarray as xr
-from pandas import DataFrame
+#import pandas as pd
+from pandas import DataFrame, Series
 
 import datetime, dateutil
 
@@ -12,13 +13,28 @@ import datetime, dateutil
 g = 9.81
 omega_earth = 2.*np.pi/86164.0905
 deg2rad = np.pi/180.
+deg2m = 111319
 
 def coriolis(lat, signed=False):
     if signed:
         return 2.*omega_earth*np.sin(lat*deg2rad)
     else:
         return 2.*omega_earth*np.sin(np.abs(lat)*deg2rad)
-        
+
+def dfdy(lat, units='1/s/m'):
+    df = 2.*omega_earth*np.cos(lat*deg2rad)*deg2rad/deg2m
+    if units=='cpd/100km':
+        df = df *86400/2./np.pi *100*1e3
+    return df
+
+def fix_lon_bounds(lon):
+    ''' reset longitudes bounds to (-180,180)'''
+    if isinstance(lon, xr.DataArray): # xarray
+        return lon.where(lon<180., other=lon-360)
+    elif isinstance(lon, Series):    # pandas series
+        out = lon.copy()
+        out[out>180.] = out[out>180.] - 360.
+        return out
 
 #------------------------------ paths ---------------------------------------
 

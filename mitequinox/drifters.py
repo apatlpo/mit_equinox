@@ -1,13 +1,18 @@
 
+from glob import glob
 import pickle
+
 import numpy as np
 import pandas as pd
 import geopandas
+import dask.bag as db
 import xarray as xr
 
 from functools import partial
 
 #--------------------------------------  pair I/O ------------------------------------------------
+
+data_dir = '/work/ALT/swot/aval/syn/drifters/'
 
 def load_pair(p, data_dir):
     d0, id0 = pickle.load(open(data_dir+'single/%09d.p'%p[0], 'rb'))
@@ -30,6 +35,19 @@ def load_pair(p, data_dir):
     gd1 = to_gdataframe(d1)
     return gd0, gd1, p
 
+def _to_dict(x):
+    out = x[0]
+    out['ID'] = x[1]
+    return out.to_dict()
+
+def load_single_df(npartitions=100):
+    ''' could also load directly from netcdf files
+    '''
+    files = sorted(glob(data_dir+'single/*.p'))
+    b = ( db.from_sequence(files[:], npartitions=npartitions) \
+         .map(lambda f: pickle.load(open(f, 'rb'))) )
+    return b.map(_to_dict).to_dataframe()
+    
 #--------------------------------------  binning ------------------------------------------------
 
 # leverages apply_ufunc with numpy binning code
