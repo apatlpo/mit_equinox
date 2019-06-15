@@ -173,6 +173,22 @@ def rotate(u,v,ds):
     
 #------------------------------ enatl60 specific ---------------------------------------
 
+def load_enatl60_UV(chunks={'x': 480, 'y': 480}):
+    ds_U = xr.open_zarr(enatl60_data_dir+'zarr/eNATL60-BLBT02-SSU-1h')
+    ds_V = xr.open_zarr(enatl60_data_dir+'zarr/eNATL60-BLBT02-SSV-1h')
+    ds_V = ds_V.drop('nav_lon')
+    ds = xr.merge([ds_U, ds_V])
+    ds = ds.rename({'time_counter':'time', 'nav_lon':'lon', 'nav_lat':'lat',
+                    'sozocrtx': 'SSU', 'somecrty': 'SSV'})
+    ds = ds.set_coords(['lon','lat'])
+    ds = ds.chunk(chunks)
+    return ds
 
-
+def load_enatl60_grid(chunks={'x': 440, 'y': 440}):
+    grd = (xr.open_dataset(enatl60_data_dir+'mesh_mask_eNATL60_3.6.nc', 
+                           chunks=chunks)
+           .squeeze()
+           .rename({'nav_lon':'lon','nav_lat':'lat','nav_lev':'z'})
+           .set_coords(['lon','lat','z']))
+    return grd
 

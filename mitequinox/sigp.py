@@ -84,7 +84,7 @@ def get_E(v, f=None, **kwargs):
     if 'nperseg' in kwargs:
         Nb = kwargs['nperseg']
     else:
-        Nb = 80*24
+        Nb = 60*24
         kwargs['nperseg']= Nb
     if f is None:
         f, E = _get_E(v.values, ufunc=False, **kwargs)

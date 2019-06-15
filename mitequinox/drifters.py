@@ -14,9 +14,18 @@ from functools import partial
 
 data_dir = '/work/ALT/swot/aval/syn/drifters/'
 
+def load_from_ID(ID):
+    try:
+        return pickle.load(open(data_dir+'single/argos_%09d.p'%ID, 'rb'))
+    except:
+        try:
+            return pickle.load(open(data_dir+'single/gps_%09d.p'%ID, 'rb'))
+        except:
+            print('ID=%d has not data file in %ssingle/ directory'%(ID,data_dir))
+
 def load_pair(p, data_dir):
-    d0, id0 = pickle.load(open(data_dir+'single/%09d.p'%p[0], 'rb'))
-    d1, id1 = pickle.load(open(data_dir+'single/%09d.p'%p[1], 'rb'))
+    d0, id0 = load_from_ID(p[0])
+    d1, id1 = load_from_ID(p[1])
     # get rid of gaps and interpolate if necessary
     d0 = d0[~pd.isnull(d0.index)]
     d1 = d1[~pd.isnull(d1.index)]
@@ -40,10 +49,15 @@ def _to_dict(x):
     out['ID'] = x[1]
     return out.to_dict()
 
-def load_single_df(npartitions=100):
+def load_single_df(npartitions=100, gps=None):
     ''' could also load directly from netcdf files
     '''
-    files = sorted(glob(data_dir+'single/*.p'))
+    if gps is None:
+        files = sorted(glob(data_dir+'single/*.p'))
+    elif gps==0:
+        files = sorted(glob(data_dir+'single/argos_*.p'))
+    elif gps==1:
+        files = sorted(glob(data_dir+'single/gps_*.p'))
     b = ( db.from_sequence(files[:], npartitions=npartitions) \
          .map(lambda f: pickle.load(open(f, 'rb'))) )
     return b.map(_to_dict).to_dataframe()
@@ -157,7 +171,6 @@ def compute_lonlat(*args, dropv=True,
         return [compute_lonlat(df, dropv=dropv, v0=v0, v1=v1, v2=v2, 
                                lon_key=lon_key, lat_key=lat_key ) for df in args]
     
-
 def to_gdataframe(*args):
     if len(args)==1:
         df = args[0]
