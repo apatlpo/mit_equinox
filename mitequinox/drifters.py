@@ -9,17 +9,18 @@ import dask.bag as db
 import xarray as xr
 
 from functools import partial
+from .utils import fix_lon_bounds, work_data_dir
 
 #--------------------------------------  pair I/O ------------------------------------------------
 
-data_dir = '/work/ALT/swot/aval/syn/drifters/'
+dr_data_dir = '/work/ALT/swot/aval/syn/drifters/'
 
 def load_from_ID(ID):
     try:
-        return pickle.load(open(data_dir+'single/argos_%09d.p'%ID, 'rb'))
+        return pickle.load(open(dr_data_dir+'single/argos_%09d.p'%ID, 'rb'))
     except:
         try:
-            return pickle.load(open(data_dir+'single/gps_%09d.p'%ID, 'rb'))
+            return pickle.load(open(dr_data_dir+'single/gps_%09d.p'%ID, 'rb'))
         except:
             print('ID=%d has not data file in %ssingle/ directory'%(ID,data_dir))
 
@@ -53,14 +54,37 @@ def load_single_df(npartitions=100, gps=None):
     ''' could also load directly from netcdf files
     '''
     if gps is None:
-        files = sorted(glob(data_dir+'single/*.p'))
+        files = sorted(glob(dr_data_dir+'single/*.p'))
     elif gps==0:
-        files = sorted(glob(data_dir+'single/argos_*.p'))
+        files = sorted(glob(dr_data_dir+'single/argos_*.p'))
     elif gps==1:
-        files = sorted(glob(data_dir+'single/gps_*.p'))
+        files = sorted(glob(dr_data_dir+'single/gps_*.p'))
     b = ( db.from_sequence(files[:], npartitions=npartitions) \
          .map(lambda f: pickle.load(open(f, 'rb'))) )
     return b.map(_to_dict).to_dataframe()
+
+def load_single_df_fromnc(npartitions=100, gps=None):
+    
+    if gps is None or gps==1:
+        ds = xr.open_dataset(dr_data_dir+'raw/driftertrajGPS_1.02.nc')
+        ds = ds.chunk({'TIME':24*1000})
+        ds['GPS'] = (1 + ds.U*0.).astype(int)
+        ds_GPS = ds
+
+    if gps is None or gps==0:
+        ncfile = dr_data_dir+'raw/driftertrajWMLE_1.02_block1.nc'
+        ds = xr.open_mfdataset(dr_data_dir+'raw/driftertrajWMLE_1.02_block*.nc')
+        ds = ds.chunk({'TIME':24*1000})
+        ds['GPS'] = (0. + ds.U*0.).astype(int)
+        ds_ARGOS = ds
+    
+    if gps is None:
+        ds = xr.concat([ds_GPS, ds_ARGOS], dim='TIME')
+    
+    ds['LON'] = fix_lon_bounds(ds['LON'])
+    
+    return ds.to_dask_dataframe()
+
     
 #--------------------------------------  binning ------------------------------------------------
 
@@ -70,7 +94,6 @@ def load_single_df(npartitions=100, gps=None):
 # https://github.com/pydata/xarray/issues/1765
 
 def _bin1d(bins, v, vbin, weights=True):
-
     if weights:
         w = v
     else:
@@ -78,9 +101,9 @@ def _bin1d(bins, v, vbin, weights=True):
     h, edges = np.histogram(vbin, bins=bins, weights=w, density=False)
     return h[None,:]
 
-def bin1d(v, vbin, bins, weights, bin_dim='bin_dim', name='binned_array'):
+def bin1d(v, vbin, bins, weights, bin_dim='bin_dim', name='binned_array', core_dim='TIME'):
     # wrapper around apply_ufunc
-    dims = ['TIME'] # core dim
+    dims = [core_dim] # core dim
     bins_c = (bins[:-1]+bins[1:])*.5
     out = xr.apply_ufunc(partial(_bin1d, bins), v, vbin, kwargs={'weights': weights},
                     output_core_dims=[[bin_dim]], output_dtypes=[np.float64], 
@@ -179,3 +202,17 @@ def to_gdataframe(*args):
     else:
         return [geopandas.GeoDataFrame(df, geometry=geopandas.points_from_xy(
                     df.LON, df.LAT)) for df in args]
+
+def load_depth():
+    ds = xr.open_dataset(work_data_dir+'bathy/ETOPO1_Ice_g_gmt4.grd')
+    ds = ds.sortby(ds.x)
+    ds['x2'] = (ds.x+0.*ds.y).transpose()
+    ds['y2'] = (0.*ds.x+ds.y).transpose()
+    return ds
+
+def compute_depth(lon,lat):
+    depth = load_depth()
+    lon = (lon-180)%360 - 180
+    return -depth.z.sel(x=lon,y=lat, method='nearest')
+    
+

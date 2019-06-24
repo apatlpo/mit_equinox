@@ -10,7 +10,8 @@ bash
 conda update conda
 conda create -n equinox -c conda-forge python=3.6 dask dask-jobqueue \
             xarray jupyterlab cartopy zarr python-graphviz spectrum \
-            geopandas scikit-learn netcdf4 seaborn ipywidgets
+            geopandas scikit-learn netcdf4 seaborn ipywidgets \
+            mtspec
 conda activate equinox
 pip install git+https://github.com/apatlpo/xmitgcm.git@angles
 # this should not be necessary:
