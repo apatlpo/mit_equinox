@@ -39,9 +39,9 @@ distributed:
     # Fractions of worker memory at which we take action to avoid memory blowup
     # Set any of the lower three values to False to turn off the behavior entirely
     memory:
-      target: 0.90  # target fraction to stay below
+      target: 0.75  # target fraction to stay below
       spill: False  # fraction at which we spill to disk
-      pause: 0.80  # fraction at which we pause worker threads
+      pause: 0.85  # fraction at which we pause worker threads
       terminate: 0.95  # fraction at which we terminate the worker
 
   client:
