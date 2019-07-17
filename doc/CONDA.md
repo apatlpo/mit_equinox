@@ -8,19 +8,21 @@ Download Miniconda3 (i.e. for python3) from the [conda website](https://conda.io
 bash Miniconda3-latest-Linux-x86_64.sh
 bash
 conda update conda
-conda create -n equinox -c conda-forge python=3.6 dask dask-jobqueue \
-            xarray jupyterlab cartopy zarr python-graphviz spectrum \
+conda create -n equinox -c conda-forge python=3.7 dask dask-jobqueue \
+            xarray jupyterlab cartopy zarr python-graphviz \
             geopandas scikit-learn netcdf4 seaborn ipywidgets \
-            mtspec
+            cmocean
 conda activate equinox
-pip install git+https://github.com/apatlpo/xmitgcm.git@angles
-# this should not be necessary:
-conda install -c conda-forge future numba
-pip install git+https://github.com/xgcm/xgcm.git
-pip install git+https://github.com/rabernat/xrft.git
-pip install git+https://github.com/apatlpo/xscale.git
-pip install git+https://github.com/apatlpo/UTide.git
-conda install -c conda-forge cmocean
+conda install -c conda-forge xmitgcm xgcm
+#pip install git+https://github.com/apatlpo/xmitgcm.git@angles
+#this should not be necessary:
+#conda install -c conda-forge future numba
+#pip install git+https://github.com/xgcm/xgcm.git
+#pip install git+https://github.com/rabernat/xrft.git
+#pip install git+https://github.com/apatlpo/xscale.git
+#pip install git+https://github.com/apatlpo/UTide.git
+conda install pyinterp -c fbriol
+conda install pywavelets
 cd mit_equinox; pip install -e .
 cp datarmor/jobqueue.yaml datarmor/distributed.yaml ~/.config/dask/
 ```
@@ -94,6 +96,10 @@ conda search packagename
 Install a new package
 ```
 conda install packagename
+```
+Remove unused packages and caches:
+```
+conda clean --all
 ```
 Remove conda
 ```
