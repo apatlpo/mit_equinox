@@ -106,8 +106,8 @@ def load_data(V, ftype='zarr', **kwargs):
         elif ftype is 'nc':
             return load_data_nc(V, **kwargs)
 
-def load_data_zarr(v, suffix='_std'):
-    return xr.open_zarr(work_data_dir+'rechunked/'+v+suffix+'.zarr')
+def load_data_zarr(v):
+    return xr.open_zarr(root_data_dir+'zarr/'+v+'.zarr')
 
 def load_data_nc(v, suff='_t*', files=None, **kwargs):
     default_kwargs = {'concat_dim': 'time',
