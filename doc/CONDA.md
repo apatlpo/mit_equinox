@@ -15,9 +15,9 @@ conda create -n equinox -c conda-forge python=3.7 dask dask-jobqueue \
             hvplot geoviews datashader nodejs \
 	          intake-xarray gcsfs \
             cmocean gsw \
-            pytide pyinterp
+            pytide pyinterp \
+            xmitgcm xgcm
 conda activate equinox
-conda install -c conda-forge xmitgcm xgcm
 conda install pywavelets
 cd mit_equinox; pip install -e .
 jupyter labextension install @jupyter-widgets/jupyterlab-manager \
