@@ -9,21 +9,21 @@ bash Miniconda3-latest-Linux-x86_64.sh
 bash
 conda update conda
 conda create -n equinox -c conda-forge python=3.7 dask dask-jobqueue \
-            xarray jupyterlab cartopy zarr python-graphviz \
-            geopandas scikit-learn netcdf4 seaborn ipywidgets \
-            cmocean
+            xarray zarr netcdf4 python-graphviz \
+            jupyterlab ipywidgets \
+            cartopy geopandas scikit-learn seaborn \
+            hvplot geoviews datashader nodejs \
+	          intake-xarray gcsfs \
+            cmocean gsw \
+            pytide pyinterp
 conda activate equinox
 conda install -c conda-forge xmitgcm xgcm
-#pip install git+https://github.com/apatlpo/xmitgcm.git@angles
-#this should not be necessary:
-#conda install -c conda-forge future numba
-#pip install git+https://github.com/xgcm/xgcm.git
-#pip install git+https://github.com/rabernat/xrft.git
-#pip install git+https://github.com/apatlpo/xscale.git
-#pip install git+https://github.com/apatlpo/UTide.git
-conda install pyinterp -c fbriol
 conda install pywavelets
 cd mit_equinox; pip install -e .
+jupyter labextension install @jupyter-widgets/jupyterlab-manager \
+                             @pyviz/jupyterlab_pyviz \
+                             jupyter-leaflet \
+                             dask-labextension@1.0.0
 cp datarmor/jobqueue.yaml datarmor/distributed.yaml ~/.config/dask/
 ```
 
@@ -34,7 +34,7 @@ python -m ipykernel install --user --name equinox --display-name "EQUINOX mit pr
 
 Uninstall library after `pip install -e .`:
 - remove the egg file ( `print(distributed.__file__)` for example)
-- from file `easy-install.pth`, remove the corresponding line (it should be a path to the source directory or of an egg file). 
+- from file `easy-install.pth`, remove the corresponding line (it should be a path to the source directory or of an egg file).
 
 # General information about miniconda:
 
@@ -103,7 +103,7 @@ conda clean --all
 ```
 Remove conda
 ```
-rm -rf /home/machine/username/miniconda3 
+rm -rf /home/machine/username/miniconda3
 ```
 where machine is the name of your computer and username is your username.
 
@@ -131,5 +131,3 @@ Exporting environment
 conda env export > environment.yml on a machine
 conda env create -f environment.yml -n $ENV_NAME on the new machine
 ```
-
-
