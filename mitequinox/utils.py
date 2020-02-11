@@ -38,22 +38,18 @@ def fix_lon_bounds(lon):
 
 #------------------------------ paths ---------------------------------------
 
-# datarmor
-try:
+if os.path.isdir('/home/datawork-lops-osi/'):
+    # datarmor
     plateform='datarmor'
-    #tmp = os.getenv('TMPDIR')
     datawork = os.getenv('DATAWORK')+'/'
     home = os.getenv('HOME')+'/'
     scratch = os.getenv('SCRATCH')+'/'
-    osi = '/home/datawork-lops-osi/aponte/'
+    osi = '/home/datawork-lops-osi/'
     #
-    root_data_dir = '/home/datawork-lops-osi/data/mit4320/'
+    root_data_dir = '/home/datawork-lops-osi/equinox/mit4320/'
     grid_dir = root_data_dir+'grid/'
-except:
-    pass
-
-# hal
-try:
+elif os.path.isdir('/work/ALT/swot/'):
+    # hal
     plateform='hal'
     tmp = os.getenv('TMPDIR')
     home = os.getenv('HOME')+'/'
@@ -64,9 +60,6 @@ try:
     #grid_dir = root_data_dir+'grid/'
     #grid_dir_nc = root_data_dir+'grid_nc/'
     enatl60_data_dir = '/work/ALT/odatis/eNATL60/'
-except:
-    pass
-
 
 #------------------------------ mit specific ---------------------------------------
 

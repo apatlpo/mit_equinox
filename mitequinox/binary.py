@@ -11,15 +11,16 @@ from .utils import *
 
 #------------------------------ mit specific ---------------------------------------
 
-#
-def get_compressed_level_index(grid_dir, index_fname='llc4320_compressed_level_index.nc', geometry='llc'):
+def get_compressed_level_index(grid_dir, 
+                               index_fname='llc4320_compressed_level_index.nc', 
+                               geometry='llc'):
     ''' Some doc
     '''
     #
     ds = xm.open_mdsdataset('', grid_dir=grid_dir,
                              iters=None, geometry=geometry, read_grid=True,
                              default_dtype=np.dtype('>f4'),
-                             ignore_unknown_vars=True) #, extra_metadata=llc4320)
+                             ignore_unknown_vars=True)
     
     # get shape
     #nz, nface, ny, nx = ds.hFacC.shape
@@ -36,7 +37,8 @@ def get_compressed_level_index(grid_dir, index_fname='llc4320_compressed_level_i
         print('done')
 
     return ds_index, ds
-    
+
+_vars_datashrunk = ['Eta', 'oceTAUX', 'oceTAUY', 'KPPhbl']
 
 def load_level_from_3D_field(data_dir, varname, inum, offset, count, mask, dtype):
     ''' Some doc
@@ -44,7 +46,7 @@ def load_level_from_3D_field(data_dir, varname, inum, offset, count, mask, dtype
 
     # all iters in one directory:
     inum_str = '%010d' % inum
-    if 'Eta' in varname:
+    if varname in _vars_datashrunk:
         suff = '.data.shrunk'
     else:
         suff = '.shrunk'            
@@ -107,15 +109,18 @@ def get_compressed_data(varname, data_dir, grid_dir, ds_index=None, ds=None, ite
     if iters is 'all':
         iters = xm.mds_store._get_all_iternums(data_dir, file_prefixes=varname, 
                                                file_format='*.??????????.data.shrunk')
-    
+        
     # load mask from raw data
-    hfac = xm.utils.read_mds(grid_dir + 'hFac' + point,
-                             use_mmap=True, dask_delayed=False, force_dict=False) 
+    hfac = xm.utils.read_mds(grid_dir + 'hFac' + point, llc=True, dtype=dtype,
+                             use_mmap=False, use_dask=True, chunks='2D')['hFac'+point][k].compute()
+    #hfac = xm.utils.read_mds(grid_dir + 'hFac' + point,
+    #                         use_mmap=True, use_dask=False, chunks="2D") #, force_dict=False) 
     #hfac = xm.utils.read_mds(grid_dir + 'hFac' + point, llc=True,
     #                         use_mmap=True, use_dask=False, extra_metadata=llc4320)['hFac' + point]
     #                        use_mmap=True, use_dask=False, force_dict=False)['hFac' + point]
     #hfac = xm.utils.read_3d_llc_data(grid_dir + 'hFac'+point+'.data', 90, 4320, dtype='>f4', memmap=True)
-    mask = hfac[k]>0
+    #mask = hfac[k]>0
+    mask = hfac>0
     if client is None:
         mask_future = mask
     else:
@@ -162,7 +167,7 @@ def get_iters_time(varname, data_dir, delta_t=25.):
         time in seconds
     '''
     file_suff = '.shrunk'
-    if varname is 'Eta':
+    if varname in _vars_datashrunk:
         file_suff = '.data.shrunk'
     #
     iters = xm.mds_store._get_all_iternums(data_dir, file_prefixes=varname, 
