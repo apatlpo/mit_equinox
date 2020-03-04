@@ -9,9 +9,6 @@ from cmocean import cm
 import numpy as np
 import pandas as pd
 
-#from .utils import *
-
-
 _default_cmaps = {'SSU': cm.balance, 'SSV': cm.balance,
            'SSU_geo': cm.balance, 'SSV_geo': cm.balance,
            'Eta': plt.get_cmap('RdGy_r'),
@@ -69,6 +66,8 @@ def plot_scalar(v, colorbar=False, title=None, vmin=None, vmax=None, savefig=Non
 
 #
 def quick_llc_plot(data, axis_off=False, **kwargs):
+    """ quick plotter for llc4320 data
+    """
     face_to_axis = {0: (2, 0), 1: (1, 0), 2: (0, 0),
                     3: (2, 1), 4: (1, 1), 5: (0, 1),
                     7: (0, 2), 8: (1, 2), 9: (2, 2),
