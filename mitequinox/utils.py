@@ -47,7 +47,13 @@ if os.path.isdir('/home/datawork-lops-osi/'):
     osi = '/home/datawork-lops-osi/'
     #
     root_data_dir = '/home/datawork-lops-osi/equinox/mit4320/'
-    grid_dir = root_data_dir+'grid/'
+    #
+    bin_data_dir = root_data_dir+'bin/'
+    bin_grid_dir = bin_data_dir+'grid/'
+    #
+    zarr_data_dir = root_data_dir+'zarr/'
+    zarr_grid = zarr_data_dir+'grid.zarr'
+    mask_path = zarr_data_dir+'mask.zarr'
 elif os.path.isdir('/work/ALT/swot/'):
     # hal
     plateform='hal'
