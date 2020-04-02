@@ -16,9 +16,10 @@ conda create -n equinox -c conda-forge python=3.7 dask dask-jobqueue \
 conda activate equinox
 #conda install -c conda-forge xgcm xmitgcm
 conda install pip  # new, required for pip install git+https
-#pip install git+https://github.com/xgcm/xgcm.git
-conda install -c conda-forge xgcm 
-pip install git+https://github.com/apatlpo/xmitgcm.git@mask_debug
+pip install git+https://github.com/xgcm/xgcm.git
+#conda install -c conda-forge xgcm
+pip install git+https://github.com/MITgcm/xmitgcm.git
+pip install git+https://github.com/xgcm/xrft.git
 conda install pywavelets
 cd mit_equinox; pip install -e .
 jupyter labextension install @jupyter-widgets/jupyterlab-manager \
