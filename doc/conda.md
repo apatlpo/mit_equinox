@@ -5,10 +5,11 @@ Download Miniconda3 (i.e. for python3) from the [conda website](https://conda.io
 bash Miniconda3-latest-Linux-x86_64.sh
 bash
 conda update conda
-conda create -n equinox -c conda-forge python=3.7 dask dask-jobqueue \
+conda create -n equinox -c conda-forge python=3.8 dask dask-jobqueue \
             xarray zarr netcdf4 python-graphviz \
             jupyterlab ipywidgets \
-            cartopy geopandas scikit-learn seaborn \
+            cartopy geopandas descartes \
+            scikit-learn seaborn \
             hvplot geoviews datashader nodejs \
             intake-xarray gcsfs \
             cmocean gsw \
@@ -21,6 +22,10 @@ pip install git+https://github.com/xgcm/xgcm.git
 pip install git+https://github.com/MITgcm/xmitgcm.git
 pip install git+https://github.com/xgcm/xrft.git
 conda install pywavelets
+conda install -c conda-forge parcels
+git clone https://github.com/Mikejmnez/llc_transformations.git
+cp llc_transformations/llc_rearrange/LLC_rearrange.py  mit_equinox/mitequinox/
+#
 cd mit_equinox; pip install -e .
 jupyter labextension install @jupyter-widgets/jupyterlab-manager \
                              @pyviz/jupyterlab_pyviz \

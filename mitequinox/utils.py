@@ -94,11 +94,14 @@ def load_grdnc(V):
             objs.append(xr.open_dataset(f))
     return xr.merge(objs, compat='equals').set_coords(names=gv)
 
-def load_data(V, ftype='zarr', **kwargs):
-    if type(V) is list:
-        #return xr.merge([load_data(v, ftype=ftype, **kwargs) for v in V]
-        #               , compat='equals')
-        return [load_data(v, ftype=ftype, **kwargs) for v in V]
+def load_data(V, ftype='zarr', merge=True, **kwargs):
+    if isinstance(V, list):
+        out = [load_data(v, ftype=ftype, **kwargs) for v in V]
+        if merge:
+            return xr.merge(out)
+        else:
+            return out
+        return 
     else:
         if ftype is 'zarr':
             return load_data_zarr(V, **kwargs)
