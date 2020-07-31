@@ -7,6 +7,7 @@ bash
 conda update conda
 conda create -n equinox -c conda-forge python=3.8 dask dask-jobqueue \
             xarray zarr netcdf4 python-graphviz \
+            tqdm \
             jupyterlab ipywidgets \
             cartopy geopandas descartes \
             scikit-learn seaborn \

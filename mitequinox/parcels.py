@@ -15,6 +15,9 @@ import pyproj
 
 from xmitgcm.llcreader import llcmodel as llc
 
+
+# ------------------------------- llc tiling -------------------------------------
+
 _mates = [['maskW', 'maskS'],
           ['TAUX', 'TAUY'], 
           ['SSU', 'SSV'],
@@ -40,10 +43,10 @@ class tiler(object):
                  name='tiling',
                  N_extra=1000,
                 ):
-        if ds:
+        if ds is not None:
             self._build(ds, factor, overlap, N_extra)
             self.name=name
-        elif tile_dir:
+        elif tile_dir is not None:
             self._load(tile_dir)
         else:
             assert False, 'Either ds or tile_dir are required.'
@@ -236,37 +239,51 @@ class tiler(object):
 
         print('Tiler stored in {}'.format(tile_dir))
         
-    def assign(self, gs=None, lon=None, lat=None, inner=True):
+    def assign(self, 
+               lon=None, lat=None, 
+               gs=None, 
+               inner=True,
+               tiles=None,
+              ):
         ''' assign data to tiles
         Parameters
         ----------
-        lon, lat: iterables
+        lon, lat: iterables, optional
             longitude and latitudes
+        gs: dataframe, optional
+            contains long
         inner: boolean
-        
+            assigns to inner part of the domain only
+        tiles: list, optional
+            search in a subset of tiles
         '''
-        if lon and lat:
-            gs = geopandas.GeoSeries([Point(_lon, _lat) for _lon, _lat in zip(lon, lat)],
-                                     crs=crs_wgs84,
-                                    )
+        if lon is not None and lat is not None:
+            pts = geopandas.points_from_xy(lon, lat)
+            gs = geopandas.GeoSeries(pts, crs=crs_wgs84)
         if inner:
             polygons = self.S['boundaries']
         else:
             polygons = self.S['tiles']
-        df = pd.DataFrame([gs.to_crs(crs).within(p) for p, crs in zip(polygons, self.CRS)]).T
-        
-        tile_ids = np.arange(self.N_tiles)
+
+        if tiles is None:
+            tiles = np.arange(self.N_tiles)
+        elif isinstance(tiles, list):
+            tiles = np.array(tiles)
+
+        df = pd.DataFrame([gs.to_crs(self.CRS[t]).within(polygons[t]) for t in tiles]).T
+
         def _find_column(v):
-            out = tile_ids[v]
+            out = tiles[v]
             if out.size==0:
                 return -1
             else:
                 return out[0]
         tiles = df.apply(_find_column, axis=1)
-        
         return tiles
+    # assignment is slow, could we improve this?
+    # https://gis.stackexchange.com/questions/346550/accelerating-geopandas-for-selecting-points-inside-polygon
     
-    def tile(self, ds, tile=None, rechunk=True):
+    def tile(self, ds, tile=None, rechunk=True, persist=False):
         ''' Load zarr archive and tile
 
         Parameters
@@ -288,14 +305,24 @@ class tiler(object):
         if tile is None:
             tile=list(range(self.N_tiles))
         if isinstance(tile, list):
-            return [self.tile(ds, tile=i, rechunk=rechunk) for i in tile]
+            return [self.tile(ds, tile=i, rechunk=rechunk, persist=persist) 
+                    for i in tile
+                   ]
         ds = ds.isel(i=self.tiles[tile][0],
                      j=self.tiles[tile][1],
                      i_g=self.tiles[tile][0],
                      j_g=self.tiles[tile][1],
                     )
-        if rechunk:
-            ds = ds.chunk({'i': -1, 'j': -1, 'i_g': -1, 'j_g': -1})
+        #
+        _default_rechunk = {'i': -1, 'j': -1, 'i_g': -1, 'j_g': -1}
+        if rechunk==True:
+            ds = ds.chunk(_default_rechunk)
+        elif isinstance(rechunk, dict):
+            _default_rechunk.update(rechunk)
+            ds = ds.chunk(_default_rechunk)
+        #
+        if persist:
+            ds = ds.persist()
         return ds
     
         
@@ -414,3 +441,18 @@ def generate_randomly_located_data(lon=(0,180),
                   np.random.uniform(lat[0], lat[1],(N,)))
              ]
     return geopandas.GeoSeries(points, crs=crs_wgs84)    
+
+
+# ------------------------------- parcels specific code ----------------------------
+
+def fuse_dimensions(ds):
+    coords = list(ds.coords)
+    for c in ['i_g','j_g']:
+        coords.remove(c) 
+    ds = ds.reset_coords()
+    ds = xr.merge([ds[v].rename({d: d[0] for d in ds[v].dims if d!='time'}) 
+                   for v in ds
+                  ])
+    ds = ds.set_coords(coords)
+    return ds
+
