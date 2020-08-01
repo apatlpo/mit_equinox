@@ -7,13 +7,21 @@ from itertools import product
 import numpy as np
 import xarray as xr
 import pandas as pd
+
 import geopandas
 from shapely.geometry import Polygon, Point
 import pyproj
+from datetime import timedelta, datetime
+
+import dask
 
 #from matplotlib import pyplot as plt
 
 from xmitgcm.llcreader import llcmodel as llc
+
+from parcels import FieldSet, ParticleSet, ParticleFile, plotTrajectoriesFile
+from parcels import JITParticle, ScipyParticle
+from parcels import ErrorCode, NestedField, AdvectionEE, AdvectionRK4
 
 
 # ------------------------------- llc tiling -------------------------------------
@@ -443,6 +451,21 @@ def generate_randomly_located_data(lon=(0,180),
     return geopandas.GeoSeries(points, crs=crs_wgs84)    
 
 
+def tile_store_llc(t):
+    
+    tslice = slice(t, t+dt_windows*24, None)
+    ds_tsubset = ds.isel(time=tslice)
+
+    D = tl.tile(ds_tsubset, persist=False)
+    #rechunk={'time': 2}
+
+    for tile, ds_tile in enumerate(tqdm(D)):
+        # i_g -> i, j->j_g
+        ds_tile = pa.fuse_dimensions(ds_tile)
+        #
+        nc_file = os.path.join(tile_data_dirs[tile], 'llc.nc')
+        ds_tile.to_netcdf(nc_file)
+
 # ------------------------------- parcels specific code ----------------------------
 
 def fuse_dimensions(ds):
@@ -456,3 +479,213 @@ def fuse_dimensions(ds):
     ds = ds.set_coords(coords)
     return ds
 
+# should create a class with code below
+class run(object):
+
+    def __init__(self, 
+                 tile,
+                 tl,
+                 tile_data_dirs, 
+                 ds,
+                 pclass='jit',
+                 netcdf=False,
+                ):
+
+        self.tile = tile
+        self.tl = tl
+        self.run_dir = tile_data_dirs[tile]
+        self._tile_dirs = tile_data_dirs
+
+        # load fieldset
+        self.init_field_set(ds, netcdf)
+        # step_window would call such object
+
+        self.particle_class = _get_particle_class(pclass)
+    
+    def __getitem__(self, item):
+        if item in ['lon', 'lat']:
+            return self.pset.particle_data[item]
+        elif item=='size':
+            return self.pset.size
+    
+    def init_field_set(self, ds, netcdf):
+
+        self._fieldset_netcdf = netcdf
+        
+        variables = {'U': 'SSU', 
+                     'V': 'SSV',
+                     'waterdepth': 'Depth',
+                    }
+        dims = {'U': {'lon': 'XC', 'lat': 'YC', 'time':'time'},
+                'V': {'lon': 'XC', 'lat': 'YC', 'time':'time'},
+                'waterdepth': {'lon': 'XC', 'lat': 'YC'},
+               }
+        if netcdf==False:
+            fieldset = FieldSet.from_xarray_dataset(ds,
+                                                    variables=variables,
+                                                    dimensions=dims,
+                                                    interp_method='cgrid_velocity',
+                                                   )
+        else:
+            fieldset = FieldSet.from_netcdf(netcdf,
+                                            variables=variables,
+                                            dimensions=dims,
+                                            interp_method='cgrid_velocity',
+                                           )
+        self.fieldset = fieldset
+
+    def init_particles_t0(self, ds, dij):
+        ''' Initial particle positions
+        '''
+        tile, tl, fieldset = self.tile, self.tl, self.fieldset
+
+        # first step, create drifters positions
+        x = (ds[['XC','YC']]
+              .isel(i=slice(0,None,dij), j=slice(0,None,dij))
+              .stack(drifter=('i','j'))
+              .reset_coords()
+             )
+        x = x.where(x.Depth>0, drop=True)
+        xv, yv = x.XC.values, x.YC.values
+        # use tile to select points within the tile (most time conssuming operation)
+        in_tile = tl.assign(lon=xv, lat=yv, tiles=[tile])
+        xv, yv = xv[in_tile[in_tile==tile].index], yv[in_tile[in_tile==tile].index]
+        #
+        pset = ParticleSet(fieldset=fieldset, pclass=self.particle_class, 
+                           lon=xv.flatten(), lat=yv.flatten(), # ** add index such as 
+                          )
+        self.pset = pset
+
+    def init_particles_restart(step):
+        ''' reload data from previous runs
+        '''
+
+        tile, tl, fieldset = self.tile, self.tl, self.fieldset
+
+        # load parcel file from previous runs
+        pset = None
+        for _tile in range(tl.N_tiles):
+            ncfile = self.nc(step-1, _tile)
+            _pset = ParticleSet.from_particlefile(fieldset, 
+                                                  pclass=self.particle_class, 
+                                                 filename=ncfile,
+                                                 ) # restarttime=restarttime
+            df = pd.read_csv(filename_assigned_data(_tile, step-1), index_col=0)
+            #df = df[df==tile]
+            df_not_in_tile = df[df!=tile]
+            if df_not_in_tile.size>0:
+                _pset.remove_indices(index_not_in_tile)
+            if _pset.size>0:
+                if pset is None:
+                    pset = _pset
+                else:
+                    pset.add(_pset)
+        self.pset = pset
+
+    def execute(self, T, step, 
+                dt_step=1, dt_out=1, 
+                advection='euler',
+               ):
+        
+        if advection=='euler':
+            adv = AdvectionEE
+        else:
+            adv = AdvectionRK4
+
+        pset = self.pset
+        
+        if pset.size>0:
+            file_out = pset.ParticleFile(self.nc(step), 
+                                         outputdt=timedelta(hours=dt_out)
+                                        )
+            pset.execute(adv,
+                         runtime=timedelta(days=T),
+                         dt=timedelta(hours=dt_step),
+                         output_file=file_out,
+                         recovery={ErrorCode.ErrorOutOfBounds: DeleteParticle},
+                        )
+        
+    def nc(self, step, tile=None):
+        if tile is None:
+            tile = self.tile
+        tile_dir = self._tile_dirs[tile]
+        file = 'floats_{:03d}_{:03d}.nc'.format(step, tile)
+        return os.path.join(tile_dir, file)
+
+    def csv(self, step, tile=None):
+        if tile is None:
+            tile = self.tile
+        tile_dir = self._tile_dirs[tile]
+        file = 'floats_assigned_{:03d}_{:03d}.csv'.format(step, tile)
+        return os.path.join(tile_dir, file)
+    
+def _get_particle_class(pclass):
+    if pclass=='jit':
+        return JITParticle
+    elif pclass=='scipy':
+        # not working at all at the moment
+        return ScipyParticle    
+
+# Make sure to remove the floats that start on land
+def DeleteParticle(particle, fieldset, time):
+    particle.delete()
+
+def RemoveOnLand(particle, fieldset, time):
+    u, v = fieldset.UV[time, particle.depth, particle.lat, particle.lon]
+    # not working below
+    #water_depth = fieldset.waterdepth[particle.depth, particle.lat, particle.lon]
+    #if math.fabs(particle.depth) < 500:
+    if math.fabs(u) < 1e-12:
+        particle.delete()
+    
+def step_window(tile, step, dt_windows, tl, run_dir, init_dij=10, parcels_remove_on_land=True, pclass='jit'):
+    ''' timestep parcels within one tile (tile) and one time window (step)
+    '''
+    
+    # https://docs.dask.org/en/latest/scheduling.html
+    # reset dask cluster locally
+    dask.config.set(scheduler='threads')
+    #from dask.distributed import Client
+    #client = Client()
+
+    # directory where tile data is stored
+    tile_data_dirs = [os.path.join(run_dir,'data_{:03d}'.format(t)) 
+                      for t in range(tl.N_tiles)
+                     ]
+    tile_dir = tile_data_dirs[tile]
+    
+    # "load" data either via pointer or via file reading
+    #ds = D[tile] #.compute() # compute necessary?
+    #
+    llc = os.path.join(tile_dir, 'llc.nc')
+    ds = xr.open_dataset(llc, chunks={'time': 1})
+
+    # init run object
+    prun = run(tile, tl, tile_data_dirs, ds)
+        
+    # load drifter positions
+    if step==0:
+        prun.init_particles_t0(ds, init_dij)
+    else:
+        prun.init_particles_restart(step)
+
+    # ** to do: make sure we are not loosing particles
+    
+    if parcels_remove_on_land and prun.pset.size>0:
+        prun.pset.execute(RemoveOnLand, dt=0, recovery={ErrorCode.ErrorOutOfBounds: DeleteParticle})
+    # 2.88 s for 10x10 tiles and dij=10
+
+    # perform the parcels simulation
+    # ** try AdvectionRK4 instead of AdvectionEE
+    prun.execute(dt_windows, step)
+    
+    # assign to tiles and store
+    if prun['size']>0:
+        # sort floats per tiles
+        float_tiles = tl.assign(lon=prun['lon'], lat=prun['lat'])
+        # store to csv
+        float_tiles.to_csv(prun.csv(step))
+
+    # ** delete objects manually?
+    #return pset # tmp for debug
+    return prun['size']

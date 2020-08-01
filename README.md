@@ -10,7 +10,7 @@ Contains code that process mitgcm output for the EQUINOx project
 ---
 ## install
 
-All scripts require python librairies that may be installed with conda according to the following instructions [here](https://github.com/apatlpo/mit_equinox/blob/master/doc/CONDA.md)
+All scripts require python librairies that may be installed with conda according to the following instructions [here](https://github.com/apatlpo/mit_equinox/blob/master/doc/conda.md)
 
 ---
 ## run on datarmor:
