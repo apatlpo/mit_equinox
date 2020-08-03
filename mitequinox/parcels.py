@@ -3,6 +3,7 @@ import os
 import os.path as path
 import pickle
 from itertools import product
+from tqdm import tqdm
 
 import numpy as np
 import xarray as xr
@@ -450,32 +451,49 @@ def generate_randomly_located_data(lon=(0,180),
              ]
     return geopandas.GeoSeries(points, crs=crs_wgs84)    
 
-
-def tile_store_llc(t):
+def tile_store_llc(ds, 
+                   time_slice, 
+                   tl,
+                   tile_data_dirs,
+                   persist=False,
+                  ):
     
-    tslice = slice(t, t+dt_windows*24, None)
-    ds_tsubset = ds.isel(time=tslice)
+    #tslice = slice(t, t+dt_windows*24, None)
+    ds_tsubset = ds.isel(time=time_slice)
+    if persist:
+        ds_tsubset = ds_tsubset.persist()
 
     D = tl.tile(ds_tsubset, persist=False)
     #rechunk={'time': 2}
 
     for tile, ds_tile in enumerate(tqdm(D)):
-        # i_g -> i, j->j_g
-        ds_tile = pa.fuse_dimensions(ds_tile)
+        # i_g -> i, j->j_g and shift
+        ds_tile = fuse_dimensions(ds_tile)
         #
         nc_file = os.path.join(tile_data_dirs[tile], 'llc.nc')
-        ds_tile.to_netcdf(nc_file)
+        ds_tile.to_netcdf(nc_file, mode='w')
 
 # ------------------------------- parcels specific code ----------------------------
 
-def fuse_dimensions(ds):
+def fuse_dimensions(ds, shift=True):
+    """ rename i_g and j_g into i and j
+    Shift horizontal grid such as to match parcels (NEMO) convention
+    see https://github.com/OceanParcels/parcels/issues/897
+    """
     coords = list(ds.coords)
     for c in ['i_g','j_g']:
-        coords.remove(c) 
+        coords.remove(c)
     ds = ds.reset_coords()
-    ds = xr.merge([ds[v].rename({d: d[0] for d in ds[v].dims if d!='time'}) 
-                   for v in ds
-                  ])
+    D = []
+    for v in ds:
+        _da = ds[v]
+        if shift and 'i_g' in ds[v].dims:
+            _da = _da.shift(i_g=-1)
+        if shift and 'j_g' in ds[v].dims:
+            _da = _da.shift(j_g=-1)
+        _da = _da.rename({d: d[0] for d in _da.dims if d!='time'})
+        D.append(_da)
+    ds = xr.merge(D)
     ds = ds.set_coords(coords)
     return ds
 
