@@ -456,6 +456,7 @@ def tile_store_llc(ds,
                    tl,
                    tile_data_dirs,
                    persist=False,
+                   netcdf=False
                   ):
     
     #tslice = slice(t, t+dt_windows*24, None)
@@ -466,12 +467,18 @@ def tile_store_llc(ds,
     D = tl.tile(ds_tsubset, persist=False)
     #rechunk={'time': 2}
 
+    ds_tiles=[]
     for tile, ds_tile in enumerate(tqdm(D)):
         # i_g -> i, j->j_g and shift
+        #ds_tile = fuse_dimensions(ds_tile).persist()
         ds_tile = fuse_dimensions(ds_tile)
         #
-        nc_file = os.path.join(tile_data_dirs[tile], 'llc.nc')
-        ds_tile.to_netcdf(nc_file, mode='w')
+        if netcdf:
+            nc_file = os.path.join(tile_data_dirs[tile], 'llc.nc')
+            ds_tile.to_netcdf(nc_file, mode='w')
+        else:
+            ds_tiles.append(ds_tile)
+    return ds_tiles
 
 # ------------------------------- parcels specific code ----------------------------
 
@@ -539,6 +546,7 @@ class run(object):
                 'waterdepth': {'lon': 'XC', 'lat': 'YC'},
                }
         if netcdf==False:
+            print(ds)
             fieldset = FieldSet.from_xarray_dataset(ds,
                                                     variables=variables,
                                                     dimensions=dims,
@@ -656,7 +664,7 @@ def RemoveOnLand(particle, fieldset, time):
     if math.fabs(u) < 1e-12:
         particle.delete()
     
-def step_window(tile, step, dt_windows, tl, run_dir, init_dij=10, parcels_remove_on_land=True, pclass='jit'):
+def step_window(tile, step, dt_windows, tl, run_dir, ds_tiles=None, init_dij=10, parcels_remove_on_land=True, pclass='jit'):
     ''' timestep parcels within one tile (tile) and one time window (step)
     '''
     
@@ -665,19 +673,22 @@ def step_window(tile, step, dt_windows, tl, run_dir, init_dij=10, parcels_remove
     dask.config.set(scheduler='threads')
     #from dask.distributed import Client
     #client = Client()
-
+    
     # directory where tile data is stored
     tile_data_dirs = [os.path.join(run_dir,'data_{:03d}'.format(t)) 
                       for t in range(tl.N_tiles)
                      ]
     tile_dir = tile_data_dirs[tile]
-    
-    # "load" data either via pointer or via file reading
-    #ds = D[tile] #.compute() # compute necessary?
-    #
-    llc = os.path.join(tile_dir, 'llc.nc')
-    ds = xr.open_dataset(llc, chunks={'time': 1})
 
+    if ds_tiles is None:
+        # "load" data either via pointer or via file reading
+        #ds = D[tile] #.compute() # compute necessary?
+        #
+        llc = os.path.join(tile_dir, 'llc.nc')
+        ds = xr.open_dataset(llc, chunks={'time': 1})
+    else:
+        ds = ds_tiles[tile].chunk(chunks={'time': 1})
+    
     # init run object
     prun = run(tile, tl, tile_data_dirs, ds)
         
