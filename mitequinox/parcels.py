@@ -546,7 +546,6 @@ class run(object):
                 'waterdepth': {'lon': 'XC', 'lat': 'YC'},
                }
         if netcdf==False:
-            print(ds)
             fieldset = FieldSet.from_xarray_dataset(ds,
                                                     variables=variables,
                                                     dimensions=dims,
@@ -579,34 +578,39 @@ class run(object):
         #
         pset = ParticleSet(fieldset=fieldset, pclass=self.particle_class, 
                            lon=xv.flatten(), lat=yv.flatten(), # ** add index such as 
+                           #pid_orig=tile*100000,
                           )
         self.pset = pset
 
-    def init_particles_restart(step):
+    def init_particles_restart(self, step):
         ''' reload data from previous runs
         '''
-
         tile, tl, fieldset = self.tile, self.tl, self.fieldset
 
         # load parcel file from previous runs
         pset = None
         for _tile in range(tl.N_tiles):
             ncfile = self.nc(step-1, _tile)
-            _pset = ParticleSet.from_particlefile(fieldset, 
-                                                  pclass=self.particle_class, 
-                                                 filename=ncfile,
-                                                 ) # restarttime=restarttime
-            df = pd.read_csv(filename_assigned_data(_tile, step-1), index_col=0)
-            #df = df[df==tile]
-            df_not_in_tile = df[df!=tile]
-            if df_not_in_tile.size>0:
-                _pset.remove_indices(index_not_in_tile)
-            if _pset.size>0:
-                if pset is None:
-                    pset = _pset
-                else:
-                    pset.add(_pset)
+            if os.path.isfile(ncfile):
+                _pset = ParticleSet.from_particlefile(fieldset, 
+                                                      pclass=self.particle_class, 
+                                                     filename=ncfile,
+                                                     ) # restarttime=restarttime
+                df = pd.read_csv(self.csv(step-1), index_col=0)
+                print('----------df=',tile)
+                print(df.head())
+                df_not_in_tile = df.loc[df.iloc[:,0]!=tile]
+                #df_not_in_tile = df[df!=tile]
+                print('----------df_not_in_tile=',tile, df_not_in_tile.size)
+                if df_not_in_tile.size>0:
+                    _pset.remove_indices(index_not_in_tile)
+                if _pset.size>0:
+                    if pset is None:
+                        pset = _pset
+                    else:
+                        pset.add(_pset)
         self.pset = pset
+        print(pset)
 
     def execute(self, T, step, 
                 dt_step=1, dt_out=1, 
@@ -679,7 +683,6 @@ def step_window(tile, step, dt_windows, tl, run_dir, ds_tiles=None, init_dij=10,
                       for t in range(tl.N_tiles)
                      ]
     tile_dir = tile_data_dirs[tile]
-
     if ds_tiles is None:
         # "load" data either via pointer or via file reading
         #ds = D[tile] #.compute() # compute necessary?
@@ -697,7 +700,9 @@ def step_window(tile, step, dt_windows, tl, run_dir, ds_tiles=None, init_dij=10,
         prun.init_particles_t0(ds, init_dij)
     else:
         prun.init_particles_restart(step)
-
+    if step>0:
+        return
+    print('******',prun['size'])
     # ** to do: make sure we are not loosing particles
     
     if parcels_remove_on_land and prun.pset.size>0:
