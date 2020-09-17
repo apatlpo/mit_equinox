@@ -1,5 +1,6 @@
 
 import os
+import gc
 import os.path as path
 import pickle
 from itertools import product
@@ -578,17 +579,20 @@ class run(object):
         #
         pset = ParticleSet(fieldset=fieldset, pclass=self.particle_class, 
                            lon=xv.flatten(), lat=yv.flatten(), # ** add index such as 
-                           #pid_orig=tile*100000,
+                           pid_orig = np.arange(xv.flatten().size)+tile*100000,
                           )
         self.pset = pset
+        #print("init_particles_t0: tile,pset.size,pset=",tile, pset.size,pset)
 
     def init_particles_restart(self, step):
         ''' reload data from previous runs
         '''
         tile, tl, fieldset = self.tile, self.tl, self.fieldset
+        print('init_particles_restart: tile=',tile)
 
         # load parcel file from previous runs
-        pset = None
+        #pset = None
+        pset = ParticleSet(fieldset=self.fieldset)
         for _tile in range(tl.N_tiles):
             ncfile = self.nc(step-1, _tile)
             if os.path.isfile(ncfile):
@@ -596,21 +600,22 @@ class run(object):
                                                       pclass=self.particle_class, 
                                                      filename=ncfile,
                                                      ) # restarttime=restarttime
-                df = pd.read_csv(self.csv(step-1), index_col=0)
-                print('----------df=',tile)
-                print(df.head())
+                df = pd.read_csv(self.csv(step-1, tile=_tile), index_col=0)
                 df_not_in_tile = df.loc[df.iloc[:,0]!=tile]
                 #df_not_in_tile = df[df!=tile]
-                print('----------df_not_in_tile=',tile, df_not_in_tile.size)
+                #print("init_particles_restart:tile, _tile,_pset=",tile,_tile,_pset)
                 if df_not_in_tile.size>0:
-                    _pset.remove_indices(index_not_in_tile)
+                    #print("init_particles_restart:tile, _tile,index=",tile, _tile,list(df_not_in_tile.index))
+                    _pset.remove_indices(list(df_not_in_tile.index))
+                #print("init_particles_restart:tile, _tile,_pset.size=",tile, _tile,_pset.size)
                 if _pset.size>0:
-                    if pset is None:
-                        pset = _pset
-                    else:
-                        pset.add(_pset)
+                    #if pset is None:
+                    #    pset = _pset
+                    #else:
+                    #    pset.add(_pset)
+                    pset.add(_pset)
         self.pset = pset
-        print(pset)
+        #print("init_particles_restart:tile, pset=",tile,pset)
 
     def execute(self, T, step, 
                 dt_step=1, dt_out=1, 
@@ -700,9 +705,7 @@ def step_window(tile, step, dt_windows, tl, run_dir, ds_tiles=None, init_dij=10,
         prun.init_particles_t0(ds, init_dij)
     else:
         prun.init_particles_restart(step)
-    if step>0:
-        return
-    print('******',prun['size'])
+    
     # ** to do: make sure we are not loosing particles
     
     if parcels_remove_on_land and prun.pset.size>0:
@@ -717,9 +720,13 @@ def step_window(tile, step, dt_windows, tl, run_dir, ds_tiles=None, init_dij=10,
     if prun['size']>0:
         # sort floats per tiles
         float_tiles = tl.assign(lon=prun['lon'], lat=prun['lat'])
+        #print("type of float_tiles:",tile,step,type(float_tiles))
         # store to csv
         float_tiles.to_csv(prun.csv(step))
 
     # ** delete objects manually?
     #return pset # tmp for debug
-    return prun['size']
+    del prun
+    gc.collect()
+    #return prun
+    return
