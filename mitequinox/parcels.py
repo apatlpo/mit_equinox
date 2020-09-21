@@ -106,8 +106,8 @@ class tiler(object):
                                                         wrap=True
                                                        )
         tiles_1d['j'], boundaries_1d['j'] = tile_domain(global_domain_size[1], 
-                                                        factor[0], 
-                                                        overlap[0]
+                                                        factor[1], 
+                                                        overlap[1]
                                                        )
         tiles = list(product(tiles_1d['i'], tiles_1d['j']))
         boundaries = list(product(boundaries_1d['i'], boundaries_1d['j']))
@@ -582,7 +582,6 @@ class run(object):
                            pid_orig = np.arange(xv.flatten().size)+tile*100000,
                           )
         self.pset = pset
-        #print("init_particles_t0: tile,pset.size,pset=",tile, pset.size,pset)
 
     def init_particles_restart(self, step):
         ''' reload data from previous runs
@@ -591,7 +590,6 @@ class run(object):
         print('init_particles_restart: tile=',tile)
 
         # load parcel file from previous runs
-        #pset = None
         pset = ParticleSet(fieldset=self.fieldset)
         for _tile in range(tl.N_tiles):
             ncfile = self.nc(step-1, _tile)
@@ -602,20 +600,17 @@ class run(object):
                                                      ) # restarttime=restarttime
                 df = pd.read_csv(self.csv(step-1, tile=_tile), index_col=0)
                 df_not_in_tile = df.loc[df.iloc[:,0]!=tile]
-                #df_not_in_tile = df[df!=tile]
-                #print("init_particles_restart:tile, _tile,_pset=",tile,_tile,_pset)
                 if df_not_in_tile.size>0:
-                    #print("init_particles_restart:tile, _tile,index=",tile, _tile,list(df_not_in_tile.index))
                     _pset.remove_indices(list(df_not_in_tile.index))
-                #print("init_particles_restart:tile, _tile,_pset.size=",tile, _tile,_pset.size)
                 if _pset.size>0:
-                    #if pset is None:
-                    #    pset = _pset
-                    #else:
-                    #    pset.add(_pset)
                     pset.add(_pset)
+                del df
+                del df_not_in_tile
+                del _pset
+                #gc.collect()
+
         self.pset = pset
-        #print("init_particles_restart:tile, pset=",tile,pset)
+        del pset
 
     def execute(self, T, step, 
                 dt_step=1, dt_out=1, 
