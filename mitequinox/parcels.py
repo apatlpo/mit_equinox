@@ -250,7 +250,7 @@ class tiler(object):
         print('Tiler stored in {}'.format(tile_dir))
         
     def assign(self, 
-               lon=None, lat=None, 
+               lon=None, lat=None, pid=None,
                gs=None, 
                inner=True,
                tiles=None,
@@ -529,7 +529,7 @@ class run(object):
         self.particle_class = _get_particle_class(pclass)
     
     def __getitem__(self, item):
-        if item in ['lon', 'lat']:
+        if item in ['lon', 'lat', 'id']:
             return self.pset.particle_data[item]
         elif item=='size':
             return self.pset.size
@@ -576,18 +576,23 @@ class run(object):
         # use tile to select points within the tile (most time conssuming operation)
         in_tile = tl.assign(lon=xv, lat=yv, tiles=[tile])
         xv, yv = xv[in_tile[in_tile==tile].index], yv[in_tile[in_tile==tile].index]
+        #print('init_particles_t0:tile,typ(xv)=',tile,xv.shape)
         #
-        pset = ParticleSet(fieldset=fieldset, pclass=self.particle_class, 
+        pset = None
+        if xv.size > 0:
+            pset = ParticleSet(fieldset=fieldset, pclass=self.particle_class, 
                            lon=xv.flatten(), lat=yv.flatten(), # ** add index such as 
-                           pid_orig = np.arange(xv.flatten().size)+tile*100000,
+                           #pid_orig = np.arange(xv.flatten().size)+(tile*100000),
                           )
         self.pset = pset
+        #print("init_particles_t0: tile,pset=",tile,pset)
+        del pset
 
     def init_particles_restart(self, step):
         ''' reload data from previous runs
         '''
         tile, tl, fieldset = self.tile, self.tl, self.fieldset
-        print('init_particles_restart: tile=',tile)
+        #print('init_particles_restart: tile=',tile)
 
         # load parcel file from previous runs
         pset = ParticleSet(fieldset=self.fieldset)
@@ -599,7 +604,8 @@ class run(object):
                                                      filename=ncfile,
                                                      ) # restarttime=restarttime
                 df = pd.read_csv(self.csv(step-1, tile=_tile), index_col=0)
-                df_not_in_tile = df.loc[df.iloc[:,0]!=tile]
+                #df_not_in_tile = df.loc[df.iloc[:,0]!=tile]
+                df_not_in_tile = df.loc[df['tile']!=tile]
                 if df_not_in_tile.size>0:
                     _pset.remove_indices(list(df_not_in_tile.index))
                 if _pset.size>0:
@@ -607,9 +613,9 @@ class run(object):
                 del df
                 del df_not_in_tile
                 del _pset
-                #gc.collect()
 
         self.pset = pset
+        #print("init_particles_restart: tile,pset=",tile,pset)
         del pset
 
     def execute(self, T, step, 
@@ -624,11 +630,13 @@ class run(object):
 
         pset = self.pset
         
-        if pset.size>0:
-            file_out = pset.ParticleFile(self.nc(step), 
+        #if pset.size>0:
+        if pset is not None:
+            if pset.size>0:
+                file_out = pset.ParticleFile(self.nc(step), 
                                          outputdt=timedelta(hours=dt_out)
                                         )
-            pset.execute(adv,
+                pset.execute(adv,
                          runtime=timedelta(days=T),
                          dt=timedelta(hours=dt_step),
                          output_file=file_out,
@@ -703,8 +711,10 @@ def step_window(tile, step, dt_windows, tl, run_dir, ds_tiles=None, init_dij=10,
     
     # ** to do: make sure we are not loosing particles
     
-    if parcels_remove_on_land and prun.pset.size>0:
-        prun.pset.execute(RemoveOnLand, dt=0, recovery={ErrorCode.ErrorOutOfBounds: DeleteParticle})
+    #if parcels_remove_on_land and prun.pset.size>0:
+    if parcels_remove_on_land and prun.pset is not None:
+        if prun.pset.size>0:
+            prun.pset.execute(RemoveOnLand, dt=0, recovery={ErrorCode.ErrorOutOfBounds: DeleteParticle})
     # 2.88 s for 10x10 tiles and dij=10
 
     # perform the parcels simulation
@@ -712,11 +722,13 @@ def step_window(tile, step, dt_windows, tl, run_dir, ds_tiles=None, init_dij=10,
     prun.execute(dt_windows, step)
     
     # assign to tiles and store
-    if prun['size']>0:
+    #if prun['size']>0:
+    if prun.pset is not None:
         # sort floats per tiles
         float_tiles = tl.assign(lon=prun['lon'], lat=prun['lat'])
-        #print("type of float_tiles:",tile,step,type(float_tiles))
         # store to csv
+        float_tiles = float_tiles.to_frame(name='tile')
+        #float_tiles['id'] = prun['id']
         float_tiles.to_csv(prun.csv(step))
 
     # ** delete objects manually?
