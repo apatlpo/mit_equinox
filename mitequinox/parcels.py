@@ -25,7 +25,6 @@ from parcels import FieldSet, ParticleSet, ParticleFile, plotTrajectoriesFile
 from parcels import JITParticle, ScipyParticle
 from parcels import ErrorCode, NestedField, AdvectionEE, AdvectionRK4
 
-
 # ------------------------------- llc tiling -------------------------------------
 
 _mates = [['maskW', 'maskS'],
@@ -477,8 +476,9 @@ def tile_store_llc(ds,
         if netcdf:
             nc_file = os.path.join(tile_data_dirs[tile], 'llc.nc')
             ds_tile.to_netcdf(nc_file, mode='w')
+            ds_tiles.append(None)
         else:
-            ds_tiles.append(ds_tile)
+            ds_tiles.append(ds_tile.chunk(chunks={'time': 1}))
     return ds_tiles
 
 # ------------------------------- parcels specific code ----------------------------
@@ -551,6 +551,7 @@ class run(object):
                                                     variables=variables,
                                                     dimensions=dims,
                                                     interp_method='cgrid_velocity',
+                                                    allow_time_extrapolation=True
                                                    )
         else:
             fieldset = FieldSet.from_netcdf(netcdf,
@@ -585,7 +586,7 @@ class run(object):
                            #pid_orig = np.arange(xv.flatten().size)+(tile*100000),
                           )
         self.pset = pset
-        #print("init_particles_t0: tile,pset=",tile,pset)
+        print("init_particles_t0: pset_id(start/end)=",pset.particle_data['id'][0],pset.particle_data['id'][-1])
         del pset
 
     def init_particles_restart(self, step):
@@ -676,7 +677,7 @@ def RemoveOnLand(particle, fieldset, time):
     if math.fabs(u) < 1e-12:
         particle.delete()
     
-def step_window(tile, step, dt_windows, tl, run_dir, ds_tiles=None, init_dij=10, parcels_remove_on_land=True, pclass='jit'):
+def step_window(tile, step, dt_windows, tl, run_dir, ds_tile=None, init_dij=10, parcels_remove_on_land=True, pclass='jit'):
     ''' timestep parcels within one tile (tile) and one time window (step)
     '''
     
@@ -691,14 +692,15 @@ def step_window(tile, step, dt_windows, tl, run_dir, ds_tiles=None, init_dij=10,
                       for t in range(tl.N_tiles)
                      ]
     tile_dir = tile_data_dirs[tile]
-    if ds_tiles is None:
+    ds = ds_tile
+    if ds is None:
         # "load" data either via pointer or via file reading
         #ds = D[tile] #.compute() # compute necessary?
         #
         llc = os.path.join(tile_dir, 'llc.nc')
         ds = xr.open_dataset(llc, chunks={'time': 1})
-    else:
-        ds = ds_tiles[tile].chunk(chunks={'time': 1})
+    #else:
+    #    ds = ds_tiles[tile].chunk(chunks={'time': 1})
     
     # init run object
     prun = run(tile, tl, tile_data_dirs, ds)
@@ -720,6 +722,7 @@ def step_window(tile, step, dt_windows, tl, run_dir, ds_tiles=None, init_dij=10,
     # perform the parcels simulation
     # ** try AdvectionRK4 instead of AdvectionEE
     prun.execute(dt_windows, step)
+    #prun.execute(dt_windows, step,advection='RK4')
     
     # assign to tiles and store
     #if prun['size']>0:
