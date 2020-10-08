@@ -745,8 +745,8 @@ def step_window(tile, step, dt_windows, tl, run_dir, ds_tile=None, init_dij=10, 
         float_tiles['id'] = prun['id']
         float_tiles = float_tiles.drop_duplicates(subset=['id'])
         float_tiles.to_csv(prun.csv(step))
+        del float_tiles
     del ds
-    del float_tiles
     del prun
     #gc.collect()
     return
