@@ -22,6 +22,8 @@ import dask
 from xmitgcm.llcreader import llcmodel as llc
 
 from parcels import FieldSet, ParticleSet, ParticleFile, plotTrajectoriesFile
+#from parcels import FieldSet, ParticleFile, plotTrajectoriesFile
+#from mitequinox.particleset import ParticleSet
 from parcels import JITParticle, ScipyParticle
 from parcels import ErrorCode, NestedField, AdvectionEE, AdvectionRK4
 
@@ -521,6 +523,7 @@ class run(object):
         self.tl = tl
         self.run_dir = tile_data_dirs[tile]
         self._tile_dirs = tile_data_dirs
+        self.pclass = pclass
 
         # load fieldset
         self.init_field_set(ds, netcdf)
@@ -577,7 +580,6 @@ class run(object):
         # use tile to select points within the tile (most time conssuming operation)
         in_tile = tl.assign(lon=xv, lat=yv, tiles=[tile])
         xv, yv = xv[in_tile[in_tile==tile].index], yv[in_tile[in_tile==tile].index]
-        #print('init_particles_t0:tile,typ(xv)=',tile,xv.shape)
         #
         pset = None
         if xv.size > 0:   
@@ -587,16 +589,16 @@ class run(object):
                            #pid_orig = np.arange(xv.flatten().size)+(tile*100000),
                           )
         
-        pset.particle_data['id'] = pset.particle_data['id'] + int(tile*1e6)
+        if pset is not None:
+            if pset.size>0:
+                pset.particle_data['id'] = pset.particle_data['id'] + int(tile*1e6)
         self.pset = pset
-        print("init_particles_t0: tile, pset_id(start/end)=",tile, pset.particle_data['id'][0],pset.particle_data['id'][-1])
         del pset
 
     def init_particles_restart(self, step):
         ''' reload data from previous runs
         '''
         tile, tl, fieldset = self.tile, self.tl, self.fieldset
-        #print('init_particles_restart: tile=',tile)
 
         # load parcel file from previous runs        
         
@@ -605,27 +607,28 @@ class run(object):
         for _tile in range(tl.N_tiles):
             ncfile = self.nc(step-1, _tile)
             if os.path.isfile(ncfile):
-                self.particle_class.setLastID(0)
+                particle_class = _get_particle_class(self.pclass)
+                particle_class.setLastID(0)
                 _pset = ParticleSet.from_particlefile(fieldset, 
-                                                      pclass=self.particle_class, 
+                                                      pclass=particle_class, 
                                                      filename=ncfile,
                                                      ) # restarttime=restarttime
+                    
                 df = pd.read_csv(self.csv(step-1, tile=_tile), index_col=0)
                 df_not_in_tile = df.loc[df['tile']!=tile]
                 if df_not_in_tile.size>0:
-                    _pset.remove_indices(list(df_not_in_tile.index))
+                    boolind = np.array([_pset.particle_data['id'][i] in df_not_in_tile['id'].values 
+                            for i in range(_pset.size)])
+                    #_pset.remove_indices(list(df_not_in_tile.index))
+                    _pset.remove_booleanvector(boolind)
+                    del boolind
                 if _pset.size>0:
-                #    if pset is None:
-                #        pset = _pset
-                #    else:
                     pset.add(_pset)
                 del df
                 del df_not_in_tile
                 del _pset
 
         self.pset = pset
-        if pset.size>0:
-            print("init_particles_restart: tile, pset_id(start/end)=",tile, pset.particle_data['id'][0],pset.particle_data['id'][-1])
         del pset
 
     def execute(self, T, step, 
@@ -731,21 +734,19 @@ def step_window(tile, step, dt_windows, tl, run_dir, ds_tile=None, init_dij=10, 
     # perform the parcels simulation
     # ** try AdvectionRK4 instead of AdvectionEE
     prun.execute(dt_windows, step)
-    #prun.execute(dt_windows, step,advection='RK4')
+    #prun.execute(dt_windows, step, advection='RK4')
     
     # assign to tiles and store
-    #if prun['size']>0:
     if prun.pset is not None:
         # sort floats per tiles
         float_tiles = tl.assign(lon=prun['lon'], lat=prun['lat'])
         # store to csv
         float_tiles = float_tiles.to_frame(name='tile')
-        #float_tiles['id'] = prun['id']
+        float_tiles['id'] = prun['id']
+        float_tiles = float_tiles.drop_duplicates(subset=['id'])
         float_tiles.to_csv(prun.csv(step))
-
-    # ** delete objects manually?
-    #return pset # tmp for debug
+    del ds
+    del float_tiles
     del prun
-    gc.collect()
-    #return prun
+    #gc.collect()
     return
