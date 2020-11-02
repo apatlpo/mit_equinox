@@ -2,10 +2,11 @@ import os
 from glob import glob
 import numpy as np
 import xarray as xr
-#import pandas as pd
+import pandas as pd
 from pandas import DataFrame, Series
 
-import datetime, dateutil
+import dateutil
+from datetime import timedelta, datetime
 
 
 #------------------------------ parameters -------------------------------------
@@ -70,9 +71,9 @@ elif os.path.isdir('/work/ALT/swot/'):
 #------------------------------ mit specific ---------------------------------------
 
 def load_grd(V=None, ftype='zarr'):
-    if ftype is 'zarr':
+    if ftype == 'zarr':
         return xr.open_zarr(root_data_dir+'zarr/grid.zarr')
-    elif ftype is 'nc':
+    elif ftype == 'nc':
         return load_grdnc(V)
 
 def load_grdnc(V):
@@ -103,9 +104,9 @@ def load_data(V, ftype='zarr', merge=True, **kwargs):
             return out
         return 
     else:
-        if ftype is 'zarr':
+        if ftype == 'zarr':
             return load_data_zarr(V, **kwargs)
-        elif ftype is 'nc':
+        elif ftype == 'nc':
             return load_data_nc(V, **kwargs)
 
 def load_data_zarr(v):
@@ -116,9 +117,9 @@ def load_data_nc(v, suff='_t*', files=None, **kwargs):
                       'compat': 'equals', 
                       'chunks': {'face':1, 'i': 480, 'j':480},
                       'parallel': True}
-    if v is 'SSU':
+    if v == 'SSU':
         default_kwargs['chunks'] = {'face':1, 'i_g': 480, 'j':480}
-    elif v is 'SSV':
+    elif v == 'SSV':
         default_kwargs['chunks'] = {'face':1, 'i': 480, 'j_g':480}            
     default_kwargs.update(kwargs)
     #
@@ -142,7 +143,7 @@ def load_iters_date_files(v='Eta'):
     return DataFrame(d).set_index('date')
 
 def iters_to_date(iters, delta_t=25.):
-    t0 = datetime.datetime(2011,9,13)    
+    t0 = datetime(2011,9,13)    
     ltime = delta_t * (np.array(iters)-10368)
     dtime = [t0+dateutil.relativedelta.relativedelta(seconds=t) for t in ltime]    
     return dtime
@@ -194,3 +195,23 @@ def load_enatl60_grid(chunks={'x': 440, 'y': 440}):
            .set_coords(['lon','lat','z']))
     return grd
 
+    
+#------------------------------ time relative ---------------------------------------
+
+        
+def np64toDate(dt64, tzinfo=None):
+        """
+        Converts a Numpy datetime64 to a Python datetime.
+        :param dt64: A Numpy datetime64 variable, type dt64: numpy.datetime64
+        :param tzinfo: The timezone the date / time value is in, type tzinfo: pytz.timezone
+        :return: A Python datetime variablertype: datetime
+        """
+        ts = pd.to_datetime(dt64)
+        if tzinfo is not None:
+            return datetime(ts.year, ts.month, ts.day, ts.hour, ts.minute, ts.second, tzinfo=tzinfo)
+        return datetime(ts.year, ts.month, ts.day, ts.hour, ts.minute, ts.second)  
+    
+def dateRange(date1, date2, dt=timedelta(days=1.)):
+    for n in np.arange(date1,date2, dt):
+        yield np64toDate(n)
+    

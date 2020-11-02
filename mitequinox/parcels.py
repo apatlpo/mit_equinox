@@ -21,9 +21,7 @@ import dask
 
 from xmitgcm.llcreader import llcmodel as llc
 
-from parcels import FieldSet, ParticleSet, ParticleFile, plotTrajectoriesFile
-#from parcels import FieldSet, ParticleFile, plotTrajectoriesFile
-#from mitequinox.particleset import ParticleSet
+from parcels import FieldSet, ParticleSet, ParticleFile, plotTrajectoriesFile, Variable
 from parcels import JITParticle, ScipyParticle
 from parcels import ErrorCode, NestedField, AdvectionEE, AdvectionRK4
 
@@ -145,8 +143,8 @@ class tiler(object):
 
             for d, crs in zip(_D, CRS):
 
-                lon = _get_boundary(d['XC'])
-                lat = _get_boundary(d['YC'])
+                lon = _get_boundary(d['XC'], stride=1)
+                lat = _get_boundary(d['YC'], stride=1)
 
                 # generate shapely object
                 _polygon = Polygon(list(zip(lon,lat)))
@@ -282,6 +280,10 @@ class tiler(object):
             tiles = np.array(tiles)
 
         df = pd.DataFrame([gs.to_crs(self.CRS[t]).within(polygons[t]) for t in tiles]).T
+        dummy = [abs(37.11561204184909 - lon[i]) < 1.e-6 for i in range(len(lon))]
+        if any(dummy):
+            print('assign:835', lon[836],lat[836],df[df.index == 835] )
+            print('assign:',self.S['boundaries'])
 
         def _find_column(v):
             out = tiles[v]
@@ -460,9 +462,11 @@ def tile_store_llc(ds,
                    persist=False,
                    netcdf=False
                   ):
-    
+
     #tslice = slice(t, t+dt_windows*24, None)
-    ds_tsubset = ds.isel(time=time_slice)
+    #ds_tsubset = ds.isel(time=time_slice)
+    ds_tsubset = ds.sel(time=time_slice)
+
     if persist:
         ds_tsubset = ds_tsubset.persist()
 
@@ -506,7 +510,7 @@ def fuse_dimensions(ds, shift=True):
     ds = xr.merge(D)
     ds = ds.set_coords(coords)
     return ds
-
+    
 # should create a class with code below
 class run(object):
 
@@ -515,6 +519,10 @@ class run(object):
                  tl,
                  tile_data_dirs, 
                  ds,
+                 step,
+                 starttime,
+                 endtime,
+                 dt_windows,
                  pclass='jit',
                  netcdf=False,
                 ):
@@ -524,6 +532,10 @@ class run(object):
         self.run_dir = tile_data_dirs[tile]
         self._tile_dirs = tile_data_dirs
         self.pclass = pclass
+        self.step = step
+        self.starttime = starttime
+        self.endtime = endtime
+        self.dt_windows = dt_windows
 
         # load fieldset
         self.init_field_set(ds, netcdf)
@@ -593,6 +605,10 @@ class run(object):
             if pset.size>0:
                 pset.particle_data['id'] = pset.particle_data['id'] + int(tile*1e6)
         self.pset = pset
+        if 1000835.0 in pset.particle_data['id']:
+            index = np.argmin(np.abs(np.array(pset.particle_data['id'])-1000835.0))
+            print('init_particle_t0:', tile,pset.particle_data['id'][index],
+                  pset.particle_data['lon'][index],pset.particle_data['lat'][index] )
         del pset
 
     def init_particles_restart(self, step):
@@ -610,9 +626,10 @@ class run(object):
                 particle_class = _get_particle_class(self.pclass)
                 particle_class.setLastID(0)
                 _pset = ParticleSet.from_particlefile(fieldset, 
-                                                      pclass=particle_class, 
+                                                     pclass=particle_class, 
                                                      filename=ncfile,
-                                                     ) # restarttime=restarttime
+                                                     restarttime=self.starttime
+                                                     )
                     
                 df = pd.read_csv(self.csv(step-1, tile=_tile), index_col=0)
                 df_not_in_tile = df.loc[df['tile']!=tile]
@@ -629,10 +646,16 @@ class run(object):
                 del _pset
 
         self.pset = pset
+        if 1000835.0 in pset.particle_data['id']:
+            index = np.argmin(np.abs(np.array(pset.particle_data['id'])-1000835.0))
+            print('init_particle_restart:', tile,pset.particle_data['id'][index],
+                  pset.particle_data['lon'][index],pset.particle_data['lat'][index] )
         del pset
 
-    def execute(self, T, step, 
-                dt_step=1, dt_out=1, 
+    #def execute(self, T, step, 
+    def execute(self, endtime, step, 
+                dt_step=timedelta(hours=1.), 
+                dt_out=timedelta(hours=1.), 
                 advection='euler',
                ):
         
@@ -647,15 +670,19 @@ class run(object):
         if pset is not None:
             if pset.size>0:
                 file_out = pset.ParticleFile(self.nc(step), 
-                                         outputdt=timedelta(hours=dt_out)
+                                         outputdt=dt_out
                                         )
                 pset.execute(adv,
-                         runtime=timedelta(days=T),
-                         dt=timedelta(hours=dt_step),
-                         output_file=file_out,
-                         recovery={ErrorCode.ErrorOutOfBounds: DeleteParticle},
-                        )
-        
+                            endtime=endtime,
+                            dt=dt_step,
+                            recovery={ErrorCode.ErrorOutOfBounds: DeleteParticle}, 
+                            output_file=file_out,
+                            postIterationCallbacks=[self.SaveCsv],
+                            callbackdt=self.dt_windows)
+                
+                # force converting temporary npy directory to netcdf file
+                file_out.export()
+    
     def nc(self, step, tile=None):
         if tile is None:
             tile = self.tile
@@ -670,7 +697,24 @@ class run(object):
         file = 'floats_assigned_{:03d}_{:03d}.csv'.format(step, tile)
         return os.path.join(tile_dir, file)
     
+    def SaveCsv(self):
+        if self.pset is not None:
+            # sort floats per tiles
+            float_tiles = self.tl.assign(lon=self['lon'], lat=self['lat'])
+            # store to csv
+            float_tiles = float_tiles.to_frame(name='tile')
+            float_tiles['id'] = self['id']
+            float_tiles = float_tiles.drop_duplicates(subset=['id'])
+            float_tiles.to_csv(self.csv(self.step))
+            del float_tiles
+        if 1000835.0 in self.pset.particle_data['id']:
+            index = np.argmin(np.abs(np.array(self.pset.particle_data['id'])-1000835.0))
+            print('SaveCsv:', self.tile,self.pset.particle_data['id'][index],
+                  self.pset.particle_data['lon'][index],self.pset.particle_data['lat'][index] )
+    
 def _get_particle_class(pclass):
+    #if pclass=='llc':
+    #    return LLCParticle
     if pclass=='jit':
         return JITParticle
     elif pclass=='scipy':
@@ -686,10 +730,11 @@ def RemoveOnLand(particle, fieldset, time):
     # not working below
     #water_depth = fieldset.waterdepth[particle.depth, particle.lat, particle.lon]
     #if math.fabs(particle.depth) < 500:
-    if math.fabs(u) < 1e-12:
+    if math.fabs(u) < 1e-12 and math.fabs(v) < 1e-12:
         particle.delete()
     
-def step_window(tile, step, dt_windows, tl, run_dir, ds_tile=None, init_dij=10, parcels_remove_on_land=True, pclass='jit'):
+#def step_window(tile, step, dt_windows, tl, run_dir, ds_tile=None, init_dij=10, parcels_remove_on_land=True, 
+def step_window(tile, step, starttime, endtime, dt_windows, tl, run_dir, ds_tile=None, init_dij=10, parcels_remove_on_land=True, pclass='jit'):
     ''' timestep parcels within one tile (tile) and one time window (step)
     '''
     
@@ -715,7 +760,7 @@ def step_window(tile, step, dt_windows, tl, run_dir, ds_tile=None, init_dij=10, 
     #    ds = ds_tiles[tile].chunk(chunks={'time': 1})
     
     # init run object
-    prun = run(tile, tl, tile_data_dirs, ds)
+    prun = run(tile, tl, tile_data_dirs, ds, step, starttime, endtime, dt_windows)
         
     # load drifter positions
     if step==0:
@@ -730,22 +775,31 @@ def step_window(tile, step, dt_windows, tl, run_dir, ds_tile=None, init_dij=10, 
         if prun.pset.size>0:
             prun.pset.execute(RemoveOnLand, dt=0, recovery={ErrorCode.ErrorOutOfBounds: DeleteParticle})
     # 2.88 s for 10x10 tiles and dij=10
+    if 1000835.0 in prun.pset.particle_data['id']:
+            index = np.argmin(np.abs(np.array(prun.pset.particle_data['id'])-1000835.0))
+            print('step_window after land:', tile,prun.pset.particle_data['id'][index],
+                  prun.pset.particle_data['lon'][index],prun.pset.particle_data['lat'][index] )
 
     # perform the parcels simulation
     # ** try AdvectionRK4 instead of AdvectionEE
-    prun.execute(dt_windows, step)
+    #prun.execute(dt_windows, step)
+    prun.execute(endtime, step)   
+    if 1000835.0 in prun.pset.particle_data['id']:
+            index = np.argmin(np.abs(np.array(prun.pset.particle_data['id'])-1000835.0))
+            print('step_window after execute:', tile,prun.pset.particle_data['id'][index],
+                  prun.pset.particle_data['lon'][index],prun.pset.particle_data['lat'][index] )
     #prun.execute(dt_windows, step, advection='RK4')
     
     # assign to tiles and store
-    if prun.pset is not None:
-        # sort floats per tiles
-        float_tiles = tl.assign(lon=prun['lon'], lat=prun['lat'])
-        # store to csv
-        float_tiles = float_tiles.to_frame(name='tile')
-        float_tiles['id'] = prun['id']
-        float_tiles = float_tiles.drop_duplicates(subset=['id'])
-        float_tiles.to_csv(prun.csv(step))
-        del float_tiles
+    #if prun.pset is not None:
+    #    # sort floats per tiles
+    #    float_tiles = tl.assign(lon=prun['lon'], lat=prun['lat'])
+    #    # store to csv
+    #    float_tiles = float_tiles.to_frame(name='tile')
+    #    float_tiles['id'] = prun['id']
+    #    float_tiles = float_tiles.drop_duplicates(subset=['id'])
+    #    float_tiles.to_csv(prun.csv(step))
+    #    del float_tiles
     del ds
     del prun
     #gc.collect()
