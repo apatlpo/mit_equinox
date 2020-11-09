@@ -214,4 +214,99 @@ def np64toDate(dt64, tzinfo=None):
 def dateRange(date1, date2, dt=timedelta(days=1.)):
     for n in np.arange(date1,date2, dt):
         yield np64toDate(n)
+        
+        
+#------------------------------ parquet relative ---------------------------------------
+
+def store_parquet(run_dir, 
+              df,
+              partition_size='100MB', 
+              index='trajectory',
+              overwrite=False,
+             ):
+    """ 
+    store data under parquet format
+
+    Parameters
+    ----------
+    run_dir : str, path which drifters directory will be created in
+    df : dask dataframe to save
+    partition_size: str, optional
+        size of each partition that will be enforced
+        Default is '100MB' which is dask recommended size
+    index : str, column to set as index
+    overwrite : bool, if existant archive is overwritten or not
+    """
     
+    # check if right value for index
+    if index not in ['trajectory', 'time', 'hex_id']:
+        print('Archive index must be either trajectory, time or hex_id')
+        return
+    
+    parquet_path = os.path.join(run_dir,'drifters',index)
+
+    # check wether an archive already exists
+    if os.path.isdir(parquet_path):
+        if overwrite:
+            print('deleting existing archive: {}'.format(parquet_path))
+            shutil.rmtree(parquet_path)
+        else:
+            print('Archive already existing: {}'.format(parquet_path))
+            return
+
+    # create archive path   
+    os.system('mkdir -p %s' % parquet_path)
+    print('create new archive: {}'.format(parquet_path))
+
+    # trajectory and date are already sorted by trajectory and time
+    sortflg = False  if index == 'hex_id' else True
+    
+    # change index of dataframe
+    if index != 'trajectory':
+        df = df.reset_index()
+        df = df.set_index(index, sorted=sortflg).persist()
+
+    # repartition such that each partition is 100MB big
+    df = df.repartition(partition_size=partition_size)
+
+    # save dataframe to parquet format
+    df.to_parquet(parquet_path, engine='fastparquet')
+        
+#------------------------------ h3 relative ---------------------------------------
+
+def h3_index(df, resolution=2):
+    """
+    Add an H3 geospatial indexing system column to the dataframe
+    parameters:
+    ----------
+    df : dask dataframe to which the new column is added
+    resolution : int, cell areas for H3 Resolution (0-15)
+                  see https://h3geo.org/docs/core-library/restable for more information
+    """
+    def get_hex(row, resolution, *args, **kwargs):
+        return h3.geo_to_h3(row["lat"], row["lon"], resolution)
+
+    # resolution = 2 : 86000 km^2
+    df['hex_id'] = (df.apply(get_hex, axis=1, 
+                            args=(resolution,), meta='string') # use 'category' instead?
+                    )
+    return df
+    
+def add_lonlat(df, reset_index=False):
+    if reset_index:
+        df = df.reset_index()
+    df['lat'] = df['hex_id'].apply(lambda x: h3.h3_to_geo(x)[0])
+    df['lon'] = df['hex_id'].apply(lambda x: h3.h3_to_geo(x)[1])
+    return df
+    
+def id_to_bdy(hex_id):
+    hex_boundary = h3.h3_to_geo_boundary(hex_id) # array of arrays of [lat, lng]                    
+    hex_boundary = hex_boundary+[hex_boundary[0]]
+    return [[h[1], h[0]] for h in hex_boundary]
+
+def plot_h3_simple(df, metric_col, x='lon', y='lat', marker='o', alpha=1, 
+                 figsize=(16,12), colormap='viridis'):
+    df.plot.scatter(x=x, y=y, c=metric_col, title=metric_col
+                    , edgecolors='none', colormap=colormap, 
+                    marker=marker, alpha=alpha, figsize=figsize);
+    plt.xticks([], []); plt.yticks([], [])

@@ -60,6 +60,7 @@ class tiler(object):
         else:
             assert False, 'Either ds or tile_dir are required.'
         self.crs_wgs84 =  crs_wgs84
+        self.N_extra = N_extra
 
     def _build(self, ds, factor, overlap, N_extra, projection=None):
         ''' Generate tiling
@@ -280,10 +281,9 @@ class tiler(object):
             tiles = np.array(tiles)
 
         df = pd.DataFrame([gs.to_crs(self.CRS[t]).within(polygons[t]) for t in tiles]).T
-        dummy = [abs(37.11561204184909 - lon[i]) < 1.e-6 for i in range(len(lon))]
+        dummy = [abs(-35.703821 - lon[i]) < 1.e-5 for i in range(len(lon))]
         if any(dummy):
-            print('assign:835', lon[836],lat[836],df[df.index == 835] )
-            print('assign:',self.S['boundaries'])
+            print('assign:3000002', lon[2],lat[2],df[df.index == 2] )
 
         def _find_column(v):
             out = tiles[v]
@@ -323,11 +323,12 @@ class tiler(object):
                    ]
         ds = ds.isel(i=self.tiles[tile][0],
                      j=self.tiles[tile][1],
-                     i_g=self.tiles[tile][0],
-                     j_g=self.tiles[tile][1],
+                     #i_g=self.tiles[tile][0],
+                     #j_g=self.tiles[tile][1],
                     )
         #
-        _default_rechunk = {'i': -1, 'j': -1, 'i_g': -1, 'j_g': -1}
+        #_default_rechunk = {'i': -1, 'j': -1, 'i_g': -1, 'j_g': -1}
+        _default_rechunk = {'i': -1, 'j': -1}
         if rechunk==True:
             ds = ds.chunk(_default_rechunk)
         elif isinstance(rechunk, dict):
@@ -375,7 +376,8 @@ def tile_domain(N, factor, overlap, wrap=False):
             lower = int(f*(n-overlap)+0.5*overlap)
         upper = N
         if f<factor-1 or wrap:
-            upper = int(f*(n-overlap)+n-0.5*overlap)
+            #upper = int(f*(n-overlap)+n-0.5*overlap)
+            upper = int(f*(n-overlap)+n-0.5*overlap+1)
         boundaries.append(slice(lower, upper))
     return slices, boundaries
 
@@ -415,33 +417,33 @@ def _check_tile_directory(tile_dir, create):
         else:
             raise OSError('Directory does not exist')
 
-def tile(tiler, ds, tile=None, rechunk=True):
-    ''' Load zarr archive and tile
-
-    Parameters
-    ----------
-    ds: xr.Dataset
-        llc dataset that will be tiled
-    tile: int, optional
-        select one tile, returns a list of datasets otherwise (default)
-    rechunk: boolean, optional
-        set spatial chunks to -1
-    '''
-    if 'face' in ds.dims:
-        # pair vector variables
-        for m in _mates:
-            if m[0] in ds:
-                ds[m[0]].attrs['mate'] = m[1]
-                ds[m[1]].attrs['mate'] = m[0]
-        ds = llc.faces_dataset_to_latlon(ds).drop('face')
-    ds = ds.isel(i=tiler.tiles[tile][0],
-                 j=tiler.tiles[tile][1],
-                 i_g=self.tiles[tile][0],
-                 j_g=self.tiles[tile][1],
-                )
-    if rechunk:
-        ds = ds.chunk({'i': -1, 'j': -1, 'i_g': -1, 'j_g': -1})
-    return ds
+#def tile(tiler, ds, tile=None, rechunk=True):
+#    ''' Load zarr archive and tile
+#
+#    Parameters
+#    ----------
+#    ds: xr.Dataset
+#        llc dataset that will be tiled
+#    tile: int, optional
+#        select one tile, returns a list of datasets otherwise (default)
+#    rechunk: boolean, optional
+#        set spatial chunks to -1
+#    '''
+#    if 'face' in ds.dims:
+#        # pair vector variables
+#        for m in _mates:
+#            if m[0] in ds:
+#                ds[m[0]].attrs['mate'] = m[1]
+#                ds[m[1]].attrs['mate'] = m[0]
+#        ds = llc.faces_dataset_to_latlon(ds).drop('face')
+#    ds = ds.isel(i=tiler.tiles[tile][0],
+#                 j=tiler.tiles[tile][1],
+#                 i_g=self.tiles[tile][0],
+#                 j_g=self.tiles[tile][1],
+#                )
+#    if rechunk:
+#        ds = ds.chunk({'i': -1, 'j': -1, 'i_g': -1, 'j_g': -1})
+#    return ds
     
 def generate_randomly_located_data(lon=(0,180), 
                                    lat=(0,90), 
@@ -465,7 +467,26 @@ def tile_store_llc(ds,
 
     #tslice = slice(t, t+dt_windows*24, None)
     #ds_tsubset = ds.isel(time=time_slice)
+    # extract time slice for dt_windows
     ds_tsubset = ds.sel(time=time_slice)
+    # convert faces structure to global lat/lon structure
+    if 'face' in ds_tsubset.dims:
+        # pair vector variables
+        for m in _mates:
+            if m[0] in ds:
+                ds_tsubset[m[0]].attrs['mate'] = m[1]
+                ds_tsubset[m[1]].attrs['mate'] = m[0]
+        ds_tsubset = llc.faces_dataset_to_latlon(ds_tsubset).drop('face')
+        
+    # add N_extra points along longitude to allow wrapping around dateline
+    ds_extra = ds_tsubset.isel(i=slice(0, tl.N_extra), i_g=slice(0, tl.N_extra))
+    for dim in ['i', 'i_g']:
+        ds_extra[dim] = ds_extra[dim] + ds_tsubset[dim][-1] + 1
+    ds_tsubset = xr.merge([xr.concat([ds_tsubset[v], ds_extra[v]], 
+                                     ds_tsubset[v].dims[-1]) for v in ds_tsubset])
+    
+    # shift horizontal grid to match parcels (NEMO) convention
+    ds_tsubset = fuse_dimensions(ds_tsubset)
 
     if persist:
         ds_tsubset = ds_tsubset.persist()
@@ -476,8 +497,7 @@ def tile_store_llc(ds,
     ds_tiles=[]
     for tile, ds_tile in enumerate(tqdm(D)):
         # i_g -> i, j->j_g and shift
-        #ds_tile = fuse_dimensions(ds_tile).persist()
-        ds_tile = fuse_dimensions(ds_tile)
+        #ds_tile = fuse_dimensions(ds_tile)
         #
         if netcdf:
             nc_file = os.path.join(tile_data_dirs[tile], 'llc.nc')
@@ -605,8 +625,8 @@ class run(object):
             if pset.size>0:
                 pset.particle_data['id'] = pset.particle_data['id'] + int(tile*1e6)
         self.pset = pset
-        if 1000835.0 in pset.particle_data['id']:
-            index = np.argmin(np.abs(np.array(pset.particle_data['id'])-1000835.0))
+        if 3000002.0 in pset.particle_data['id']:
+            index = np.argmin(np.abs(np.array(pset.particle_data['id'])-3000002.0))
             print('init_particle_t0:', tile,pset.particle_data['id'][index],
                   pset.particle_data['lon'][index],pset.particle_data['lat'][index] )
         del pset
@@ -646,8 +666,8 @@ class run(object):
                 del _pset
 
         self.pset = pset
-        if 1000835.0 in pset.particle_data['id']:
-            index = np.argmin(np.abs(np.array(pset.particle_data['id'])-1000835.0))
+        if 3000002.0 in pset.particle_data['id']:
+            index = np.argmin(np.abs(np.array(pset.particle_data['id'])-3000002.0))
             print('init_particle_restart:', tile,pset.particle_data['id'][index],
                   pset.particle_data['lon'][index],pset.particle_data['lat'][index] )
         del pset
@@ -707,8 +727,8 @@ class run(object):
             float_tiles = float_tiles.drop_duplicates(subset=['id'])
             float_tiles.to_csv(self.csv(self.step))
             del float_tiles
-        if 1000835.0 in self.pset.particle_data['id']:
-            index = np.argmin(np.abs(np.array(self.pset.particle_data['id'])-1000835.0))
+        if 3000002.0 in self.pset.particle_data['id']:
+            index = np.argmin(np.abs(np.array(self.pset.particle_data['id'])-3000002.0))
             print('SaveCsv:', self.tile,self.pset.particle_data['id'][index],
                   self.pset.particle_data['lon'][index],self.pset.particle_data['lat'][index] )
     
@@ -756,9 +776,7 @@ def step_window(tile, step, starttime, endtime, dt_windows, tl, run_dir, ds_tile
         #
         llc = os.path.join(tile_dir, 'llc.nc')
         ds = xr.open_dataset(llc, chunks={'time': 1})
-    #else:
-    #    ds = ds_tiles[tile].chunk(chunks={'time': 1})
-    
+        
     # init run object
     prun = run(tile, tl, tile_data_dirs, ds, step, starttime, endtime, dt_windows)
         
@@ -768,6 +786,16 @@ def step_window(tile, step, starttime, endtime, dt_windows, tl, run_dir, ds_tile
     else:
         prun.init_particles_restart(step)
     
+    #if 3000002.0 in prun.pset.particle_data['id']:
+    if tile==23 or tile==3:
+            index = np.argmin(np.abs(np.array(prun.pset.particle_data['id'])-3000002.0))
+            print('step_window before land:tile,id,lon,lat,depth=', 
+                  tile,prun.pset.particle_data['id'][index],
+                  prun.pset.particle_data['lon'][index],prun.pset.particle_data['lat'][index],
+                  prun.pset.particle_data['depth'][index])
+            print('step_window before land:',ds['XC'].values.min(),ds['XC'].values.max())
+            print('step_window before land:',ds['YC'].values.min(),ds['YC'].values.max())
+            print('step_window before land:size=',prun.pset.particle_data['id'].size)
     # ** to do: make sure we are not loosing particles
     
     #if parcels_remove_on_land and prun.pset.size>0:
@@ -775,19 +803,23 @@ def step_window(tile, step, starttime, endtime, dt_windows, tl, run_dir, ds_tile
         if prun.pset.size>0:
             prun.pset.execute(RemoveOnLand, dt=0, recovery={ErrorCode.ErrorOutOfBounds: DeleteParticle})
     # 2.88 s for 10x10 tiles and dij=10
-    if 1000835.0 in prun.pset.particle_data['id']:
-            index = np.argmin(np.abs(np.array(prun.pset.particle_data['id'])-1000835.0))
+    
+    if tile==23 or tile==3:
+            index = np.argmin(np.abs(np.array(prun.pset.particle_data['id'])-3000002.0))
             print('step_window after land:', tile,prun.pset.particle_data['id'][index],
-                  prun.pset.particle_data['lon'][index],prun.pset.particle_data['lat'][index] )
+                  prun.pset.particle_data['lon'][index],prun.pset.particle_data['lat'][index])
+            print('step_window after land:',prun.pset.particle_data['id'].size)
 
     # perform the parcels simulation
     # ** try AdvectionRK4 instead of AdvectionEE
     #prun.execute(dt_windows, step)
     prun.execute(endtime, step)   
-    if 1000835.0 in prun.pset.particle_data['id']:
-            index = np.argmin(np.abs(np.array(prun.pset.particle_data['id'])-1000835.0))
+    #if 3000002.0 in prun.pset.particle_data['id']:
+    if tile==23 or tile==3:
+            index = np.argmin(np.abs(np.array(prun.pset.particle_data['id'])-3000002.0))
             print('step_window after execute:', tile,prun.pset.particle_data['id'][index],
-                  prun.pset.particle_data['lon'][index],prun.pset.particle_data['lat'][index] )
+                  prun.pset.particle_data['lon'][index],prun.pset.particle_data['lat'][index])
+            print('step_window after execute:',prun.pset.particle_data['id'].size)
     #prun.execute(dt_windows, step, advection='RK4')
     
     # assign to tiles and store
