@@ -223,27 +223,32 @@ def store_parquet(run_dir,
               partition_size='100MB', 
               index='trajectory',
               overwrite=False,
+              engine = 'auto',
+              compression='ZSTD',
              ):
-    """ 
-    store data under parquet format
+    """ store data under parquet format
 
     Parameters
     ----------
-    run_dir : str, path which drifters directory will be created in
-    df : dask dataframe to save
+    run_dir: str, path to the simulation
+    df: dask dataframe to store
     partition_size: str, optional
         size of each partition that will be enforced
         Default is '100MB' which is dask recommended size
-    index : str, column to set as index
-    overwrite : bool, if existant archive is overwritten or not
+    index: str, which index to set before storing the dataframe
+    overwrite: bool, can overwrite or not an existing archive
+    engine: str, engine to store the parquet format
+    compression: str, type of compression to use when storing in parquet format
     """
     
     # check if right value for index
-    if index not in ['trajectory', 'time', 'hex_id']:
-        print('Archive index must be either trajectory, time or hex_id')
+    columns_names = df.columns.tolist()+[df.index.name]
+    if index not in columns_names:
+        print('Index must be in ', columns_names)
         return
     
-    parquet_path = os.path.join(run_dir,'drifters',index)
+    #parquet_path = os.path.join(run_dir,'drifters',index)
+    parquet_path = os.path.join(run_dir,'zstd',index)
 
     # check wether an archive already exists
     if os.path.isdir(parquet_path):
@@ -257,20 +262,32 @@ def store_parquet(run_dir,
     # create archive path   
     os.system('mkdir -p %s' % parquet_path)
     print('create new archive: {}'.format(parquet_path))
-
-    # trajectory and date are already sorted by trajectory and time
-    sortflg = False  if index == 'hex_id' else True
     
     # change index of dataframe
-    if index != 'trajectory':
+    if df.index.name != index:
         df = df.reset_index()
-        df = df.set_index(index, sorted=sortflg).persist()
+        df = df.set_index(index).persist()
 
     # repartition such that each partition is 100MB big
-    df = df.repartition(partition_size=partition_size)
+    df.to_parquet(parquet_path, engine=engine,compression=compression)
 
-    # save dataframe to parquet format
-    df.to_parquet(parquet_path, engine='fastparquet')
+def load_parquet(run_dir,index='trajectory'):
+        """ load data into a dask dataframe
+        
+        Parameters
+        ----------
+            run_dir: str, path to the simulation (containing the drifters directory)
+            index: str, to set the path and load a dataframe with the right index
+        """
+        #parquet_path = os.path.join(run_dir,'drifters_snappy',index)
+        parquet_path = os.path.join(run_dir,'drifters_zstd',index) 
+        
+        # test if parquet
+        if os.path.isdir(parquet_path):
+            return dd.read_parquet(parquet_path,engine='fastparquet')
+        else:
+            print("load_parquet error: directory not found ",parquet_path)
+            return None
         
 #------------------------------ h3 relative ---------------------------------------
 
@@ -291,7 +308,7 @@ def h3_index(df, resolution=2):
                             args=(resolution,), meta='string') # use 'category' instead?
                     )
     return df
-    
+
 def add_lonlat(df, reset_index=False):
     if reset_index:
         df = df.reset_index()
@@ -310,3 +327,38 @@ def plot_h3_simple(df, metric_col, x='lon', y='lat', marker='o', alpha=1,
                     , edgecolors='none', colormap=colormap, 
                     marker=marker, alpha=alpha, figsize=figsize);
     plt.xticks([], []); plt.yticks([], [])
+    
+        
+#------------------------------ netcdf floats relative ---------------------------------------
+
+def load_cdf(run_dir, step_tile='*',index='trajectory'):
+    """
+    Load floats netcdf files from a parcel simulation
+    run_dir: str, directory of the simulation
+    step_tile: str, characteristic string to select the floats to load. (default=*)
+               name of the files are floats_xxx_xxx.nc, first xxx is step, second is tile
+               ex: floats_002_023.nc step step 2 of tile 23
+               step_tile can be 002_* for step 2 of every tile or *_023 for every step of the tile 23
+    index : str, column to set as index for the returned dask dataframe ('trajectory','time',
+            'lat','lon', or 'z')
+    """
+    def xr2df(file):
+        return xr.open_dataset(file).to_dataframe().set_index(index)
+
+    # find list of tile directories
+    tile_dir = os.path.join(run_dir,'tiling/')
+    tl = pa.tiler(tile_dir=tile_dir) 
+    tile_data_dirs = [os.path.join(run_dir,'data_{:03d}'.format(t)) 
+                      for t in range(tl.N_tiles)
+                     ]
+    
+    # find list of netcdf float files
+    float_files = []
+    for _dir in tile_data_dirs:
+        float_files.extend(sorted(glob.glob(_dir+"/floats_"+step_tile+".nc")))
+    
+    # read the netcdf files and store in a dask dataframe
+    lazy_dataframes = [delayed(xr2df)(f) for f in float_files]
+    _df = lazy_dataframes[0].compute()
+    df = dd.from_delayed(lazy_dataframes, meta=_df).repartition(partition_size='100MB').persist()
+    return df
