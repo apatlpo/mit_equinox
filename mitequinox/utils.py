@@ -247,8 +247,7 @@ def store_parquet(run_dir,
         print('Index must be in ', columns_names)
         return
     
-    #parquet_path = os.path.join(run_dir,'drifters',index)
-    parquet_path = os.path.join(run_dir,'zstd',index)
+    parquet_path = os.path.join(run_dir,'drifters',index)
 
     # check wether an archive already exists
     if os.path.isdir(parquet_path):
@@ -279,8 +278,7 @@ def load_parquet(run_dir,index='trajectory'):
             run_dir: str, path to the simulation (containing the drifters directory)
             index: str, to set the path and load a dataframe with the right index
         """
-        #parquet_path = os.path.join(run_dir,'drifters_snappy',index)
-        parquet_path = os.path.join(run_dir,'drifters_zstd',index) 
+        parquet_path = os.path.join(run_dir,'drifters',index) 
         
         # test if parquet
         if os.path.isdir(parquet_path):
