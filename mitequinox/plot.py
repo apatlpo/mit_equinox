@@ -9,6 +9,23 @@ from cmocean import cm
 import numpy as np
 import pandas as pd
 
+
+# -------------------------------- various utils -------------------------------
+
+def get_cmap_colors(Nc, cmap='plasma'):
+    """ load colors from a colormap to plot lines
+    
+    Parameters
+    ----------
+    Nc: int
+        Number of colors to select
+    cmap: str, optional
+        Colormap to pick color from (default: 'plasma')
+    """
+    scalarMap = cmx.ScalarMappable(norm=colors.Normalize(vmin=0, vmax=Nc),
+                                   cmap=cmap)
+    return [scalarMap.to_rgba(i) for i in range(Nc)]
+
 _default_cmaps = {'SSU': cm.balance, 'SSV': cm.balance,
            'SSU_geo': cm.balance, 'SSV_geo': cm.balance,
            'Eta': plt.get_cmap('RdGy_r'),
@@ -96,24 +113,54 @@ _region_params = {'atlantic':
                         {'faces':[0,1,2,6,10,11,12],
                         'extent':[-110,25,-70,70],
                         'dticks':[10,10],
-                        'projection': ccrs.Mollweide()},
+                        'projection': ccrs.Mollweide(),
+                        },
                   'south-atlantic':
                         {'faces':[1,11,0,12],
                         'extent':[-50,20,-60,5],
                         'dticks':[10,10],
                         'projection': ccrs.LambertAzimuthalEqualArea(central_longitude=-15.,
-                                                                     central_latitude=-30)}}
+                                                                     central_latitude=-30),
+                        },
+                  'global':
+                        {'faces': [i for i in range(13) if i!=6],
+                        'extent': 'global',
+                        'dticks': [10,10],
+                        'projection': ccrs.EckertIII(),
+                        },
+                  'global_pacific':
+                        {'faces': [i for i in range(13) if i!=6],
+                        'extent': 'global',
+                        'dticks': [10,10],
+                        'projection': ccrs.EckertIII(central_longitude=-180),
+                        },
+                 }
 #                  'south-atlantic':{'faces':[0,1,11,12],'extent':[-100,25,-70,5]},}
 
-def plot_pretty(v, colorbar=False, title=None, vmin=None, vmax=None, savefig=None,
-                offline=False, coast_resolution='110m', figsize=(15,15), cmap=None,
-                ignore_face=[], projection=None, extent=None, region=None,
-                colorbar_kwargs={}):
+def plot_pretty(v, 
+                title=None, 
+                vmin=None, 
+                vmax=None,
+                fig=None,
+                ax=None,
+                region='global',
+                projection=None, 
+                extent=None, 
+                ignore_face=[], 
+                cmap=None,
+                colorbar=False, 
+                colorbar_kwargs={},
+                gridlines=True,
+                coast_resolution='110m', 
+                offline=False,
+                figsize=(15,15),
+                savefig=None,
+               ):
     #
     if vmin is None:
-        vmin = v.min()
+        vmin = v.min().values
     if vmax is None:
-        vmax = v.max()
+        vmax = v.max().values
     #
     MPL_LOCK = threading.Lock()
     with MPL_LOCK:
@@ -123,58 +170,67 @@ def plot_pretty(v, colorbar=False, title=None, vmin=None, vmax=None, savefig=Non
         #
         if 'face' not in v.dims:
             v = v.expand_dims('face')
-        if region is not None:
-            if isinstance(region,dict):
-                params = region
-            else:
-                params = _region_params[region]
-            _extent = params['extent']
-            gen = (face for face in params['faces']
-                   if face not in ignore_face)
-            _projection = params['projection']
-            _dticks = params['dticks']
+        #
+        if isinstance(region,dict):
+            params = region
         else:
-            gen = (face for face in v.face.values if face not in ignore_face)
-            _projection = ccrs.Robinson()
-            _extent = None
+            params = _region_params[region]
+        _extent = params['extent']
+        _faces = (face for face in params['faces'] if face not in ignore_face)
+        _projection = params['projection']
+        _dticks = params['dticks']
+        #
         if extent is not None:
             _extent = extent
         if projection is not None:
             _projection = projection
         #
-        fig = plt.figure(figsize=figsize)
-        ax = fig.add_subplot(111, projection=_projection)
-        if _extent is not None:
+        if fig is None and ax is None:
+            fig = plt.figure(figsize=figsize)
+            ax = fig.add_subplot(111, projection=_projection)
+        # coastlines and land:
+        #if coast_resolution is not None:
+        #    ax.coastlines(resolution=coast_resolution, color='k')
+        ax.add_feature(cfeature.LAND, zorder=2)
+        if _extent=='global':
+            #_extent = ax.set_extent()
+            _extent = ax.get_extent()        
+        elif _extent is not None:
             ax.set_extent(_extent)
-        for face in gen:
+        for face in _faces:
             vplt = v.sel(face=face)
             if face in [6,7,8,9]:
+                eps = .2 # found empirically
                 # this deals with dateline crossing areas
-                im = vplt.where( (vplt.XC>0) & (vplt.XC<179.)).plot.pcolormesh(ax=ax,
+                im = vplt.where( (vplt.XC>0) & (vplt.XC<180.-eps)).plot.pcolormesh(ax=ax,
                                 transform=ccrs.PlateCarree(), vmin=vmin, vmax=vmax,
                                 x='XC', y='YC', cmap=colmap, add_colorbar=False)
-                im = vplt.where(vplt.XC<0).plot.pcolormesh(ax=ax,
+                im = vplt.where((vplt.XC<0) & (vplt.XC>-180.+eps)).plot.pcolormesh(ax=ax,
                                 transform=ccrs.PlateCarree(), vmin=vmin, vmax=vmax,
                                 x='XC', y='YC', cmap=colmap, add_colorbar=False)
             else:
                 im = vplt.plot.pcolormesh(ax=ax,
                                 transform=ccrs.PlateCarree(), vmin=vmin, vmax=vmax,
                                 x='XC', y='YC', cmap=colmap, add_colorbar=False)
+        if extent=='global':
+            ax.set_extent('global')
         if colorbar:
             cbar = fig.colorbar(im, **colorbar_kwargs)
         else:
             cbar = None
-        # grid lines:
-        xticks = np.arange(_extent[0],
-                           _extent[1]+_dticks[0],
-                           _dticks[1]*np.sign(_extent[1]-_extent[0]))
-        ax.set_xticks(xticks,crs=ccrs.PlateCarree())
-        yticks = np.arange(_extent[2],
-                           _extent[3]+_dticks[1],
-                           _dticks[1]*np.sign(_extent[3]-_extent[2]))
-        ax.set_yticks(yticks,crs=ccrs.PlateCarree())
-        #gl = ax.gridlines()
-        gl = ax.grid()
+        if gridlines and _extent is not None:
+            # grid lines:
+            xticks = np.arange(_extent[0],
+                               _extent[1]+_dticks[0],
+                               _dticks[1]*np.sign(_extent[1]-_extent[0]))
+            ax.set_xticks(xticks,crs=ccrs.PlateCarree())
+            yticks = np.arange(_extent[2],
+                               _extent[3]+_dticks[1],
+                               _dticks[1]*np.sign(_extent[3]-_extent[2]))
+            ax.set_yticks(yticks,crs=ccrs.PlateCarree())
+            gl = ax.grid()
+        else:
+            gl = ax.gridlines() # draw_labels=True
         #ax.set_xticks([0, 60, 120, 180, 240, 300, 360], crs=ccrs.PlateCarree())
         #ax.set_yticks([-90, -60, -30, 0, 30, 60, 90], crs=ccrs.PlateCarree())
         #lon_formatter = LongitudeFormatter(zero_direction_label=True)
@@ -186,11 +242,6 @@ def plot_pretty(v, colorbar=False, title=None, vmin=None, vmax=None, savefig=Non
         #    gl=ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=True, linewidth=2, color='k',
         #                    alpha=0.5, linestyle='--')
         #    gl.xlabels_top = False
-
-        # coastlines and land:
-        #if coast_resolution is not None:
-        #    ax.coastlines(resolution=coast_resolution, color='k')
-        ax.add_feature(cfeature.LAND)
         #
         if title is not None:
             ax.set_title(title,fontdict={'fontsize':20, 'fontweight':'bold'})

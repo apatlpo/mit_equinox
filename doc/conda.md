@@ -14,7 +14,8 @@ conda create -n equinox -c conda-forge python=3.8 dask dask-jobqueue \
             hvplot geoviews datashader nodejs \
             intake-xarray gcsfs \
             cmocean gsw \
-            pytide pyinterp
+            xhistogram \
+            pytide pyinterp \
 conda activate equinox
 #conda install -c conda-forge xgcm xmitgcm
 pip install git+https://github.com/xgcm/xgcm.git
