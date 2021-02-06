@@ -2,7 +2,6 @@
 
 [hal wiki](https://gitlab.cnes.fr/hpc/wikiHPC/wikis/home)
 
-
 ### .bashrc
 
 ```
@@ -19,7 +18,7 @@ umask 0003
 
 ### proxy
 
-Needs to be setup in `.bashrc`
+See setup in `.bashrc` above
 
 ### .condarc
 
@@ -68,21 +67,23 @@ pip install rechunker
 conda install -c conda-forge parcels
 conda install pywavelets
 #
+git clone https://github.com/apatlpo/mit_equinox.git
 cd mit_equinox; pip install -e .
-jupyter labextension install @jupyter-widgets/jupyterlab-manager \
-                             @pyviz/jupyterlab_pyviz \
-                             jupyter-leaflet
-cp launch/jobqueue.yaml launch/distributed.yaml ~/.config/dask/
+cp hal/setup/dask/*.yaml ~/.config/dask/
+
+jupyter labextension install @jupyter-widgets/jupyterlab-manager
+jupyter labextension install @pyviz/jupyterlab_pyviz
+jupyter labextension install jupyter-leaflet
 ```
 
 
 ### cartopy
 
 Your need to install shapefiles required to add coastlines.
-To do that, get url of data first and download zip f:
+To do that, get url of data first and download zip files:
 ```
-run cartopy_download.py --dry-run gshhs
-run cartopy_download.py --dry-run physical
+%run cartopy_download.py --dry-run gshhs
+%run cartopy_download.py --dry-run physical
 ...
 ```
 and dowload files:
@@ -95,6 +96,7 @@ wget http://naciscdn.org/naturalearth/110m/physical/ne_110m_coastline.zip
 Unzip, move and rename in ipython with:
 
 ```
+%run move_and_rename.py GSHHS_shp_2.2.0.zip
 %run move_and_rename.py  ne_110m_coastline.zip
 %run move_and_rename.py  ne_10m_coastline.zip
 %run move_and_rename.py  ne_50m_coastline.zip
