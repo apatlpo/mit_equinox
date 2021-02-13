@@ -77,7 +77,8 @@ def load_grd(V=None, ftype='zarr'):
     """
     if ftype=='zarr':
         ds = xr.open_zarr(root_data_dir+'zarr/grid.zarr')
-        ds = ds[V]
+        if V is not None:
+            ds = ds.reset_coords()[V].set_coords(names=V)
     elif ftype=='nc':
         ds = _load_grd_nc(V)
     return ds
@@ -178,7 +179,10 @@ def rotate(u,v,ds):
     # rotate from grid to zonal/meridional directions
     return u*ds.CS-v*ds.SN, u*ds.SN+v*ds.CS
     
-    
+def get_ij_dims(da):
+    i = next((d for d in da.dims if d[0]=='i'))
+    j = next((d for d in da.dims if d[0]=='j'))
+    return i, j
     
 #------------------------------ enatl60 specific ---------------------------------------
 
