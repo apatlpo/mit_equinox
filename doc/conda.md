@@ -15,20 +15,19 @@ conda create -n equinox -c conda-forge python=3.8 dask dask-jobqueue \
             intake-xarray gcsfs \
             cmocean gsw \
             xhistogram \
-            pytide pyinterp \
+            pytide pyinterp
 conda activate equinox
 #conda install -c conda-forge xgcm xmitgcm
 pip install git+https://github.com/xgcm/xgcm.git
 #conda install -c conda-forge xgcm
 pip install git+https://github.com/MITgcm/xmitgcm.git
 pip install git+https://github.com/xgcm/xrft.git
-conda install pywavelets
+pip install rechunker
 conda install -c conda-forge parcels
-git clone https://github.com/Mikejmnez/llc_transformations.git
-cp llc_transformations/llc_rearrange/LLC_rearrange.py  mit_equinox/mitequinox/
 pip install h3
 conda install -c conda-forge zstandard  # maybe not necessary with following line:
 conda install -c conda-forge fastparquet
+conda install pywavelets
 #
 cd mit_equinox; pip install -e .
 jupyter labextension install @jupyter-widgets/jupyterlab-manager \

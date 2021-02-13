@@ -71,12 +71,20 @@ elif os.path.isdir('/work/ALT/swot/'):
 #------------------------------ mit specific ---------------------------------------
 
 def load_grd(V=None, ftype='zarr'):
-    if ftype == 'zarr':
-        return xr.open_zarr(root_data_dir+'zarr/grid.zarr')
-    elif ftype == 'nc':
-        return load_grdnc(V)
+    """
+    Parameters:
+        V: str, list, optional
+        List of coordinates to select
+    """
+    if ftype=='zarr':
+        ds = xr.open_zarr(root_data_dir+'zarr/grid.zarr')
+        if V is not None:
+            ds = ds.reset_coords()[V].set_coords(names=V)
+    elif ftype=='nc':
+        ds = _load_grd_nc(V)
+    return ds
 
-def load_grdnc(V):
+def _load_grd_nc(V):
     _hasface = ['CS', 'SN', 'Depth', 
                 'dxC', 'dxG', 'dyC', 'dyG', 
                 'hFacC', 'hFacS', 'hFacW', 
@@ -104,9 +112,9 @@ def load_data(V, ftype='zarr', merge=True, **kwargs):
             return out
         return 
     else:
-        if ftype == 'zarr':
+        if ftype=='zarr':
             return load_data_zarr(V, **kwargs)
-        elif ftype == 'nc':
+        elif ftype=='nc':
             return load_data_nc(V, **kwargs)
 
 def load_data_zarr(v):
@@ -117,9 +125,9 @@ def load_data_nc(v, suff='_t*', files=None, **kwargs):
                       'compat': 'equals', 
                       'chunks': {'face':1, 'i': 480, 'j':480},
                       'parallel': True}
-    if v == 'SSU':
+    if v=='SSU':
         default_kwargs['chunks'] = {'face':1, 'i_g': 480, 'j':480}
-    elif v == 'SSV':
+    elif v=='SSV':
         default_kwargs['chunks'] = {'face':1, 'i': 480, 'j_g':480}            
     default_kwargs.update(kwargs)
     #
@@ -172,7 +180,10 @@ def rotate(u,v,ds):
     # rotate from grid to zonal/meridional directions
     return u*ds.CS-v*ds.SN, u*ds.SN+v*ds.CS
     
-    
+def get_ij_dims(da):
+    i = next((d for d in da.dims if d[0]=='i'))
+    j = next((d for d in da.dims if d[0]=='j'))
+    return i, j
     
 #------------------------------ enatl60 specific ---------------------------------------
 
