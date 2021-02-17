@@ -861,7 +861,11 @@ def load_cdf(run_dir,
             'lat','lon', or 'z')
     """
     def xr2df(file):
-        return xr.open_dataset(file).to_dataframe().set_index(index)
+        ds = xr.open_dataset(file)
+        # fix trajectory type
+        ds['trajectory'] = ds['trajectory'].astype('int32')
+        #
+        return ds.to_dataframe().set_index(index)
 
     # find list of tile directories
     #tile_dir = os.path.join(run_dir,'tiling/')
@@ -891,26 +895,35 @@ def load_cdf(run_dir,
 #------------------------------ parquet relative ---------------------------------------
 
 def store_parquet(run_dir, 
-              df,
-              partition_size='100MB', 
-              index='trajectory',
-              overwrite=False,
-              engine = 'auto',
-              compression='ZSTD',
-             ):
+                  df,
+                  partition_size='100MB', 
+                  index=None,
+                  overwrite=False,
+                  engine='auto',
+                  compression='ZSTD',
+                  name=None,
+                 ):
     """ store data under parquet format
 
     Parameters
     ----------
-    run_dir: str, path to the simulation
-    df: dask dataframe to store
-    partition_size: str, optional
-        size of each partition that will be enforced
-        Default is '100MB' which is dask recommended size
-    index: str, which index to set before storing the dataframe
-    overwrite: bool, can overwrite or not an existing archive
-    engine: str, engine to store the parquet format
-    compression: str, type of compression to use when storing in parquet format
+        run_dir: str
+            path to the simulation
+        df: dask.dataframe 
+            to be stored
+        partition_size: str, optional
+            size of each partition that will be enforced
+            Default is '100MB' which is dask recommended size
+        index: str
+            which index to set before storing the dataframe
+        overwrite: bool
+            can overwrite or not an existing archive
+        engine: str
+            engine to store the parquet format
+        compression: str
+            type of compression to use when storing in parquet format
+        name: str, optional
+            name of the parquet archive on disk
     """
     
     # check if right value for index
@@ -919,7 +932,9 @@ def store_parquet(run_dir,
         print('Index must be in ', columns_names)
         return
     
-    parquet_path = os.path.join(run_dir,'drifters',index)
+    if name is None:
+        name = index
+    parquet_path = os.path.join(run_dir, 'drifters', name)
 
     # check wether an archive already exists
     if os.path.isdir(parquet_path):
@@ -935,7 +950,7 @@ def store_parquet(run_dir,
     print('create new archive: {}'.format(parquet_path))
     
     # change index of dataframe
-    if df.index.name != index:
+    if index is not None and df.index.name != index:
         df = df.reset_index()
         df = df.set_index(index).persist()
 
@@ -961,6 +976,12 @@ def load_parquet(run_dir,
         else:
             print("load_parquet error: directory not found ",parquet_path)
             return None
+
+#------------------------------ post-processing ------------------------------------
+
+# add velocity
+
+        
         
 #------------------------------ h3 relative ---------------------------------------
 
