@@ -28,6 +28,7 @@ pip install h3
 conda install -c conda-forge zstandard  # maybe not necessary with following line:
 conda install -c conda-forge fastparquet
 conda install pywavelets
+pip install git+git://github.com/psf/black
 #
 cd mit_equinox; pip install -e .
 jupyter labextension install @jupyter-widgets/jupyterlab-manager \
