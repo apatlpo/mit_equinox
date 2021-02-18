@@ -1,4 +1,5 @@
 import os, shutil
+from os.path import join
 import gc
 import os.path as path
 import pickle
@@ -59,6 +60,8 @@ class tiler(object):
         name="tiling",
         N_extra=1000,
     ):
+        """ Object handling a custom tiling of global llc data
+        """
         if ds is not None:
             self._build(ds, factor, overlap, N_extra)
             self.name = name
@@ -187,7 +190,7 @@ class tiler(object):
         """Load tiler from tile_dir"""
 
         # load various dict
-        with open(path.join(tile_dir, "various.p"), "rb") as f:
+        with open(join(tile_dir, "various.p"), "rb") as f:
             various = pickle.load(f)
         self.global_domain_size = various["global_domain_size"]
         self.N_tiles = various["N_tiles"]
@@ -218,7 +221,7 @@ class tiler(object):
         S, G = {}, {}
         for key in ["tiles", "boundaries"]:
             S[key], G[key] = [], []
-            df = pd.read_csv(path.join(tile_dir, key + "_bdata.csv"))
+            df = pd.read_csv(join(tile_dir, key + "_bdata.csv"))
             for i, crs in enumerate(self.CRS):
                 polygon = Polygon(
                     list(zip(df["x{:03d}".format(i)], df["y{:03d}".format(i)]))
@@ -245,14 +248,14 @@ class tiler(object):
         # df = df.assign(crs=self.crs_strings)
         # header
         # header = ['{}={}'.format(v) for v in [self.]]
-        # df.to_csv(path.join(tile_dir, 'slices_crs_scalars.csv'))
+        # df.to_csv(join(tile_dir, 'slices_crs_scalars.csv'))
         various = {
             "slices": df,
             "crs_strings": self.crs_strings,
             "global_domain_size": self.global_domain_size,
             "N_tiles": self.N_tiles,
         }
-        with open(path.join(tile_dir, "various.p"), "wb") as f:
+        with open(join(tile_dir, "various.p"), "wb") as f:
             pickle.dump(various, f)
 
         # boundary data
@@ -264,7 +267,7 @@ class tiler(object):
                 ],
                 axis=1,
             )
-            df.to_csv(path.join(tile_dir, key + "_bdata.csv"))
+            df.to_csv(join(tile_dir, key + "_bdata.csv"))
 
         print("Tiler stored in {}".format(tile_dir))
 
@@ -303,6 +306,8 @@ class tiler(object):
             tiles = np.array(tiles)
 
         df = pd.DataFrame([gs.to_crs(self.CRS[t]).within(polygons[t]) for t in tiles]).T
+        
+        # purpose of code below: Sylvie?
         dummy = [abs(-35.703821 - lon[i]) < 1.0e-5 for i in range(len(lon))]
         if any(dummy):
             print("assign:3000002", lon[2], lat[2], df[df.index == 2])
@@ -348,11 +353,8 @@ class tiler(object):
         ds = ds.isel(
             i=self.tiles[tile][0],
             j=self.tiles[tile][1],
-            # i_g=self.tiles[tile][0],
-            # j_g=self.tiles[tile][1],
         )
         #
-        # _default_rechunk = {'i': -1, 'j': -1, 'i_g': -1, 'j_g': -1}
         _default_rechunk = {"i": -1, "j": -1}
         if rechunk == True:
             ds = ds.chunk(_default_rechunk)
@@ -533,7 +535,7 @@ def tile_store_llc(ds, time_slice, tl, tile_data_dirs, persist=False, netcdf=Fal
         # ds_tile = fuse_dimensions(ds_tile)
         #
         if netcdf:
-            nc_file = os.path.join(tile_data_dirs[tile], "llc.nc")
+            nc_file = join(tile_data_dirs[tile], "llc.nc")
             ds_tile.to_netcdf(nc_file, mode="w")
             ds_tiles.append(None)
         else:
@@ -569,6 +571,7 @@ def fuse_dimensions(ds, shift=True):
 
 # should create a class with code below
 class run(object):
+    
     def __init__(
         self,
         tile,
@@ -668,6 +671,7 @@ class run(object):
             if pset.size > 0:
                 pset.particle_data["id"] = pset.particle_data["id"] + int(tile * 1e6)
         self.pset = pset
+        
         if 3000002.0 in pset.particle_data["id"]:
             index = np.argmin(np.abs(np.array(pset.particle_data["id"]) - 3000002.0))
             print(
@@ -717,6 +721,9 @@ class run(object):
                 del df_not_in_tile
                 del _pset
 
+        # could add particle here based on density
+        
+                
         self.pset = pset
         if 3000002.0 in pset.particle_data["id"]:
             index = np.argmin(np.abs(np.array(pset.particle_data["id"]) - 3000002.0))
@@ -768,14 +775,14 @@ class run(object):
             tile = self.tile
         tile_dir = self._tile_dirs[tile]
         file = "floats_{:03d}_{:03d}.nc".format(step, tile)
-        return os.path.join(tile_dir, file)
+        return join(tile_dir, file)
 
     def csv(self, step, tile=None):
         if tile is None:
             tile = self.tile
         tile_dir = self._tile_dirs[tile]
         file = "floats_assigned_{:03d}_{:03d}.csv".format(step, tile)
-        return os.path.join(tile_dir, file)
+        return join(tile_dir, file)
 
     def SaveCsv(self):
         if self.pset is not None:
@@ -824,7 +831,6 @@ def RemoveOnLand(particle, fieldset, time):
         particle.delete()
 
 
-# def step_window(tile, step, dt_windows, tl, run_dir, ds_tile=None, init_dij=10, parcels_remove_on_land=True,
 def step_window(
     tile,
     step,
@@ -838,7 +844,23 @@ def step_window(
     parcels_remove_on_land=True,
     pclass="jit",
 ):
-    """timestep parcels within one tile (tile) and one time window (step)"""
+    """timestep parcels within one tile (tile) and one time window (step)
+    
+    Parameters:
+    -----------
+        tile:
+        step:
+        starttime:
+        endtime:
+        dt_windows:
+        tl:
+        run_dir:
+        ds_tile:
+        init_dij:
+        parcels_remove_on_land: boolean, optional
+        pclass: str, optional
+        
+    """
 
     # https://docs.dask.org/en/latest/scheduling.html
     # reset dask cluster locally
@@ -848,7 +870,7 @@ def step_window(
 
     # directory where tile data is stored
     tile_data_dirs = [
-        os.path.join(run_dir, "data_{:03d}".format(t)) for t in range(tl.N_tiles)
+        join(run_dir, "data_{:03d}".format(t)) for t in range(tl.N_tiles)
     ]
     tile_dir = tile_data_dirs[tile]
     ds = ds_tile
@@ -856,7 +878,7 @@ def step_window(
         # "load" data either via pointer or via file reading
         # ds = D[tile] #.compute() # compute necessary?
         #
-        llc = os.path.join(tile_dir, "llc.nc")
+        llc = join(tile_dir, "llc.nc")
         ds = xr.open_dataset(llc, chunks={"time": 1})
 
     # init run object
@@ -966,9 +988,9 @@ def load_cdf(
         return ds.to_dataframe().set_index(index)
 
     # find list of tile directories
-    # tile_dir = os.path.join(run_dir,'tiling/')
+    # tile_dir = join(run_dir,'tiling/')
     # tl = tiler(tile_dir=tile_dir)
-    # tile_data_dirs = [os.path.join(run_dir,'data_{:03d}'.format(t))
+    # tile_data_dirs = [join(run_dir,'data_{:03d}'.format(t))
     #                  for t in range(tl.N_tiles)
     #                 ]
     tile_data_dirs = glob(run_dir + "/data_*")
@@ -996,6 +1018,7 @@ def store_parquet(
     partition_size="100MB",
     index=None,
     overwrite=False,
+    sub_dir=None,
     engine="auto",
     compression="ZSTD",
     name=None,
@@ -1011,27 +1034,37 @@ def store_parquet(
         partition_size: str, optional
             size of each partition that will be enforced
             Default is '100MB' which is dask recommended size
-        index: str
+        index: str, optional
             which index to set before storing the dataframe
-        overwrite: bool
+        name: str, optional
+            name of the parquet archive on disk
+        overwrite: bool, optional
             can overwrite or not an existing archive
+        sub_dir: str, optional
+            default is 'parquets'
         engine: str
             engine to store the parquet format
         compression: str
             type of compression to use when storing in parquet format
-        name: str, optional
-            name of the parquet archive on disk
     """
 
     # check if right value for index
     columns_names = df.columns.tolist() + [df.index.name]
-    if index not in columns_names:
+    if index is None:
+        print('No reindexing')
+    elif index not in columns_names:
         print("Index must be in ", columns_names)
         return
 
     if name is None:
-        name = index
-    parquet_path = os.path.join(run_dir, "drifters", name)
+        if index is not None:
+            name = index
+        else:
+            print('index or name needs to be provided')
+            return
+    if sub_dir is None:
+        sub_dir = 'parquets'
+    parquet_path = join(run_dir, sub_dir, name)
 
     # check wether an archive already exists
     if os.path.isdir(parquet_path):
@@ -1052,6 +1085,9 @@ def store_parquet(
         df = df.set_index(index).persist()
 
     # repartition such that each partition is 100MB big
+    if partition_size is not None:
+        df = df.repartition(partition_size=partition_size)
+    
     df.to_parquet(parquet_path, engine=engine, compression=compression)
 
 
@@ -1067,7 +1103,7 @@ def load_parquet(
         run_dir: str, path to the simulation (containing the drifters directory)
         index: str, to set the path and load a dataframe with the right index
     """
-    parquet_path = os.path.join(run_dir, "drifters", index)
+    parquet_path = join(run_dir, "drifters", index)
 
     # test if parquet
     if os.path.isdir(parquet_path):
@@ -1079,8 +1115,171 @@ def load_parquet(
 
 # ------------------------------ post-processing ------------------------------------
 
-# add velocity
 
+class parcels_output(object):
+    
+    def __init__(self, 
+                 run_dir, 
+                 parquets=None,
+                 persist=False,
+                ):
+        """ Load parcels distributed run
+        """
+        self.run_dir = run_dir
+        # explore tree and load relevant data
+        tile_dir = join(run_dir, 'tiling/')
+        if os.path.isdir(tile_dir):
+            self.tiler = tiler(tile_dir=tile_dir)
+        parquet_dir = join(run_dir, 'parquets/')
+        if os.path.isdir(parquet_dir):
+            parquet_paths = glob(parquet_dir+'*')
+            self.parquets = {p.split('/')[-1]: p for p in parquet_paths}
+        else:
+            print('Not parquet files found, may need to produce them, see parcel_distributed.ipynb')
+        self.df = {}
+        if parquets is not None:
+            for p in parquets:
+                assert p in self.parquets, '{} parquet file does not exist'.format(p)
+                _df = dd.read_parquet(self.parquets[p], engine="fastparquet")
+                if persist:
+                    _df = _df.persist()
+                self.df[p] = _df
+        #
+        self.diagnostic_dir = join(self.run_dir,'diagnostics')
+                
+    ### store/load diagnostics
+    def store_diagnostic(self, name, data, 
+                         overwrite=False,
+                         directory='diagnostics/',
+                         **kwargs
+                        ):
+        """ Write diagnostics to disk
+        
+        Parameters
+        ----------
+        name: str
+            Name of a diagnostics to store on disk
+        data: dd.DataFrame (other should be implemented)
+            Data to be stored
+        overwrite: boolean, optional
+            Overwrite an existing diagnostic. Default is False
+        directory: str, optional
+            Directory where diagnostics will be stored (absolute or relative to output directory).
+            Default is 'diagnostics/'
+        **kwargs:
+            Any keyword arguments that will be passed to the file writer
+        """
+        # create diagnostics dir if not present
+        _dir = _check_diagnostic_directory(directory, 
+                                           self.run_dir, 
+                                           create=True,
+                                          )
+        #
+        if isinstance(data, dd.DataFrame):
+            # store to parquet
+            store_parquet(self.run_dir, 
+                          data,
+                            overwrite=overwrite,
+                            name=name,
+                          sub_dir='diagnostics',
+                          **kwargs
+                         )
+        if isinstance(data, xr.Dataset):
+            # store to zarr format
+            zarr_path = join(_dir,name+'.zarr')
+            write_kwargs = dict(kwargs)
+            if overwrite:
+                write_kwargs.update({'mode': 'w'})
+            data = _move_singletons_as_attrs(data)
+            data = _reset_chunk_encoding(data)
+            data.to_zarr(zarr_path, **write_kwargs)            
+            print('{} diagnostics stored in {}'.format(name, zarr_path))
+
+    def load_diagnostic(self, name, 
+                        directory='diagnostics/',
+                        persist=False,
+                        **kwargs):
+        """ Load diagnostics from disk
+        
+        Parameters
+        ----------
+        name: str, list
+            Name of a diagnostics or list of names of diagnostics to load
+        directory: str, optional
+            Directory where diagnostics will be stored (absolute or relative to output directory).
+            Default is 'diagnostics/'
+        **kwargs:
+            Any keyword arguments that will be passed to the file reader
+        """
+        _dir = _check_diagnostic_directory(directory, self.run_dir)
+        data_path = join(_dir, name)
+        # find the diagnostic file
+        if os.path.isdir(data_path):
+            if '.' not in name:
+                # parquet archive
+                data = dd.read_parquet(data_path, engine="auto")
+            elif '.zarr' in name:
+                data = xr.open_zarr(data_path)
+                # zarr archive
+            if persist:
+                data = data.persist()
+            return data  
+        else:
+            print('{} does not exist'.parquet_path)
+  
+                
+def _check_diagnostic_directory(directory, dirname, 
+                                create=False):
+    """ Check existence of a directory and create it if necessary
+    """
+    # create diagnostics dir if not present
+    if os.path.isdir(directory):
+        # directory is an absolute path
+        _dir = directory
+    elif os.path.isdir(join(dirname, directory)):
+        # directory is relative
+        _dir = join(dirname, directory)
+    else:
+        if create:
+            # need to create the directory
+            _dir = join(dirname, directory)
+            os.mkdir(_dir)
+            print('Create new diagnostic directory {}'.format(_dir))
+        else:
+            raise OSError('Directory does not exist')
+    return _dir                
+                
+def _move_singletons_as_attrs(ds, ignore=[]):
+    """ change singleton variables and coords to attrs
+    This seems to be required for zarr archiving
+    """
+    for c,co in ds.coords.items():
+        if co.size==1 and ( len(co.dims)==1 and co.dims[0] not in ignore or len(co.dims)==0 ):
+            ds = ds.drop_vars(c).assign_attrs({c: ds[c].values})
+    for v in ds.data_vars:
+        if ds[v].size==1 and ( len(v.dims)==1 and v.dims[0] not in ignore or len(v.dims)==0 ):
+            ds = ds.drop_vars(v).assign_attrs({v: ds[v].values})
+    return ds
+
+def _reset_chunk_encoding(ds):
+    ''' Delete chunks from variables encoding. 
+    This may be required when loading zarr data and rewriting it with different chunks
+    
+    Parameters
+    ----------
+    ds: xr.DataArray, xr.Dataset
+        Input data
+    '''
+    if isinstance(ds, xr.DataArray):
+        return _reset_chunk_encoding(ds.to_dataset()).to_array()
+    #
+    for v in ds.coords:
+        if 'chunks' in ds[v].encoding:
+            del ds[v].encoding['chunks']
+    for v in ds:
+        if 'chunks' in ds[v].encoding:
+            del ds[v].encoding['chunks']
+    return ds
 
 # ------------------------------ h3 relative ---------------------------------------
 

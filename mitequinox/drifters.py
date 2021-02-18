@@ -250,7 +250,7 @@ def time_window_processing(
         regular_time = np.arange(tmin, tmax, dt)
         p = p.reindex(regular_time).interpolate()
         if geo:
-            p = dr.compute_lonlat(
+            p = compute_lonlat(
                 p,
                 lon_key=dim_x,
                 lat_key=dim_y,
@@ -286,24 +286,25 @@ def mean_position(df, Lx=None):
             Domain width for periodical domains
     """
     # guess grid type
-    lon = next((c for c in _df.columns if "lon" in c.lower()), None)
-    lat = next((c for c in _df.columns if "lat" in c.lower()), None)
-    if lon is not None and lat is not None:
-        # df = dr.compute_vector(df, lon_key=lon, lat_key=lat)
+    dim_x, dim_y, geo = guess_spatial_dims(df)
+    #lon = next((c for c in df.columns if "lon" in c.lower()), None)
+    #lat = next((c for c in df.columns if "lat" in c.lower()), None)
+    if geo:
+        lon, lat = dim_x, dim_y
         if "v0" not in df:
             df = compute_vector(df, lon_key=lon, lat_key=lat)
-        mean = dr.compute_lonlat(
+        mean = compute_lonlat(
             df.mean(),
             dropv=True,
             lon_key=lon,
             lat_key=lat,
         )
         return mean[lon], mean[lat]
-    if "x" in df and "y" in df:
+    else:
         if Lx is not None:
             x = (
                 (
-                    np.angle(np.exp(1j * (df["x"] * 2.0 * np.pi / L - np.pi)).mean())
+                    np.angle(np.exp(1j * (df[dim_x] * 2.0 * np.pi / L - np.pi)).mean())
                     + np.pi
                 )
                 * Lx
@@ -311,8 +312,8 @@ def mean_position(df, Lx=None):
                 / np.pi
             )
         else:
-            x = df["x"].mean()
-        y = df["y"].mean()
+            x = df[dim_x].mean()
+        y = df[dim_y].mean()
         return x, y
 
 
@@ -354,6 +355,7 @@ def get_spectrum(v, N, dt=None, method="welch", detrend="linear", **kwargs):
     if detrend and not method == "welch":
         print("!!! Not implemented yet except for welch")
     if method == "welch":
+        from scipy import signal
         dkwargs = {
             "window": "hann",
             "return_onesided": False,
@@ -363,10 +365,12 @@ def get_spectrum(v, N, dt=None, method="welch", detrend="linear", **kwargs):
         dkwargs.update(kwargs)
         f, E = signal.periodogram(_v, fs=1 / dt, axis=0, **dkwargs)
     elif method == "mtspec":
+        from mtspec import mtspec
         lE, f = mtspec(
             data=_v, delta=dt, time_bandwidth=4.0, number_of_tapers=6, quadratic=True
         )
     elif method == "mt":
+        import nitime.algorithms as tsa
         dkwargs = {"NW": 2, "sides": "twosided", "adaptive": False, "jackknife": False}
         dkwargs.update(kwargs)
         lf, E, nu = tsa.multi_taper_psd(_v, Fs=1 / dt, **dkwargs)
@@ -379,7 +383,6 @@ def get_spectrum(v, N, dt=None, method="welch", detrend="linear", **kwargs):
 
 earth_radius = 6378.0
 deg2rad = np.pi / 180.0
-
 
 def haversine(lon1, lat1, lon2, lat2):
     """Computes the Haversine distance in kilometres between two points
@@ -484,8 +487,8 @@ def guess_spatial_dims(df):
     Detects longitude, latitude first
     Serach then for x/y
     """
-    lon = next((c for c in _df.columns if "lon" in c.lower()), None)
-    lat = next((c for c in _df.columns if "lat" in c.lower()), None)
+    lon = next((c for c in df.columns if "lon" in c.lower()), None)
+    lat = next((c for c in df.columns if "lat" in c.lower()), None)
     if lon is not None and lat is not None:
         return lon, lat, True
     if "x" in df and "y" in df:
