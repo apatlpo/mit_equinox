@@ -4,6 +4,7 @@ import numpy as np
 import xarray as xr
 import pandas as pd
 from pandas import DataFrame, Series
+import geopandas as gpd
 
 import dateutil
 from datetime import timedelta, datetime
@@ -45,23 +46,25 @@ def fix_lon_bounds(lon):
 
 if os.path.isdir("/home/datawork-lops-osi/"):
     # datarmor
-    plateform = "datarmor"
+    platform = "datarmor"
     datawork = os.getenv("DATAWORK") + "/"
     home = os.getenv("HOME") + "/"
     scratch = os.getenv("SCRATCH") + "/"
     osi = "/home/datawork-lops-osi/"
     #
     root_data_dir = "/home/datawork-lops-osi/equinox/mit4320/"
+    ref_data_dir = "/dataref/ocean-analysis/intranet/LLC4320_surface/"
     #
     bin_data_dir = root_data_dir + "bin/"
     bin_grid_dir = bin_data_dir + "grid/"
     #
-    zarr_data_dir = root_data_dir + "zarr/"
+    #zarr_data_dir = root_data_dir + "zarr/"
+    zarr_data_dir = ref_data_dir
     zarr_grid = zarr_data_dir + "grid.zarr"
     mask_path = zarr_data_dir + "mask.zarr"
 elif os.path.isdir("/work/ALT/swot/"):
     # hal
-    plateform = "hal"
+    platform = "hal"
     tmp = os.getenv("TMPDIR")
     home = os.getenv("HOME") + "/"
     scratch = os.getenv("HOME") + "/scratch/"
@@ -270,3 +273,59 @@ def np64toDate(dt64, tzinfo=None):
 def dateRange(date1, date2, dt=timedelta(days=1.0)):
     for n in np.arange(date1, date2, dt):
         yield np64toDate(n)
+
+        
+# ------------------------------ misc data ---------------------------------------
+        
+def load_bathy(subsample=None):
+    """ Load bathymetry (etopo1)
+    
+    Parameters
+    ----------
+        subsample: int, optional
+            subsampling parameter:
+                30 leads to 1/2 deg resolution
+                15 leads to 1/4 deg resolution
+    """
+    if platform=="datarmor":
+        path = os.path.join(osi, "equinox/misc/bathy/ETOPO1_Ice_g_gmt4.grd")
+    ds = xr.open_dataset(path)
+    if subsample is not None:
+        ds = ds.isel(x=slice(0, None, subsample),
+                     y=slice(0, None, subsample),
+                    )
+    ds['z'] = -ds['z']
+    ds = ds.rename({'x':'lon', 'y':'lat', 'z': 'h'})
+    return ds['h']
+
+
+def load_oceans(features=["oceans"]):
+    """ Load Oceans, Seas and other features shapes
+    
+    Usage
+    -----
+    oceans = load_oceans()
+    oceans.loc[oceans.name == 'North Atlantic Ocean'].plot()
+    
+    Parameters
+    ----------
+        features: tuple, optional
+            Features to output: ("oceans", "seas", "other")
+    """
+    if platform=="datarmor":
+        path = os.path.join(osi, "equinox/misc/World_Seas_IHO_v3/World_Seas_IHO_v3.shp")
+    gdf = gpd.read_file(path)
+    gdf = gdf.rename(columns={c: c.lower() for c in gdf.columns})
+    out = {}
+    if "oceans" in features:
+        out["oceans"] = gdf.loc[gdf.name.str.contains('Ocean')]
+    if "seas" in features:
+        out["seas"] = gdf.loc[gdf.name.str.contains('Sea')]
+    if "other" in features:
+        out["other"] = gdf.loc[~gdf.name.str.contains('Ocean|Sea')]
+    if len(out)==1:
+        return list(out.values())[0]
+    else:
+        return out
+
+

@@ -264,7 +264,7 @@ def time_window_processing(
     t = tmin
     while t + T < tmax:
         #
-        _p = p.loc[t : t + T]
+        _p = p.loc[t : t + T].iloc[:-1, :] # last iloc is because pandas include the last date
         # compute average position
         x, y = mean_position(_p, Lx=Lx)
         # apply myfun
