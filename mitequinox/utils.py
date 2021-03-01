@@ -131,7 +131,7 @@ def load_data(V, ftype="zarr", merge=True, **kwargs):
     if isinstance(V, list):
         out = [load_data(v, ftype=ftype, **kwargs) for v in V]
         if merge:
-            return xr.merge(out)
+            return xr.merge(out, join='inner')
         else:
             return out
         return

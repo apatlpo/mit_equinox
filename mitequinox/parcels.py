@@ -1,15 +1,15 @@
 import os, shutil
-from os.path import join
-import gc
-import os.path as path
+from glob import glob
+import yaml
 import pickle
+
 from itertools import product
 from tqdm import tqdm
-from glob import glob
 
 import numpy as np
 import xarray as xr
 import pandas as pd
+from heapq import nsmallest
 
 import geopandas
 from shapely.geometry import Polygon, Point
@@ -22,13 +22,34 @@ import dask
 import dask.dataframe as dd
 from dask.delayed import delayed
 
-# from matplotlib import pyplot as plt
-
 from xmitgcm.llcreader import llcmodel as llc
 
 from parcels import FieldSet, ParticleSet, ParticleFile, plotTrajectoriesFile, Variable
 from parcels import JITParticle, ScipyParticle
 from parcels import ErrorCode, NestedField, AdvectionEE, AdvectionRK4
+
+from .drifters import haversine
+
+# ------------------------------- dir tree management ------------------------------
+
+def create_dir_tree(root_dir, run_name, overwrite=False):
+    """ Create run directory tree based on a root_dir and run_name
+    """
+    run_root_dir = os.path.join(root_dir, run_name)
+    _create_dir(run_root_dir, overwrite)
+    dirs = {"run_root": run_root_dir}
+    #
+    for sub_dir in ["run", "tiling", "parquets", "diagnostics"]:
+        dirs[sub_dir] = os.path.join(run_root_dir, sub_dir)
+        _create_dir(dirs[sub_dir], overwrite)
+    return dirs
+
+def _create_dir(directory, overwrite):
+    if os.path.isdir(directory) and not overwrite:
+        print('Not overwriting {}'.format(directory))
+    else:
+        shutil.rmtree(directory, ignore_errors=True)
+        os.mkdir(directory)    
 
 # ------------------------------- llc tiling -------------------------------------
 
@@ -43,7 +64,6 @@ _mates = [
 ]
 
 crs_wgs84 = pyproj.CRS("EPSG:4326")
-
 
 def default_projection(lon, lat):
     # https://proj.org/operations/projections/laea.html
@@ -190,7 +210,7 @@ class tiler(object):
         """Load tiler from tile_dir"""
 
         # load various dict
-        with open(join(tile_dir, "various.p"), "rb") as f:
+        with open(os.path.join(tile_dir, "various.p"), "rb") as f:
             various = pickle.load(f)
         self.global_domain_size = various["global_domain_size"]
         self.N_tiles = various["N_tiles"]
@@ -221,7 +241,7 @@ class tiler(object):
         S, G = {}, {}
         for key in ["tiles", "boundaries"]:
             S[key], G[key] = [], []
-            df = pd.read_csv(join(tile_dir, key + "_bdata.csv"))
+            df = pd.read_csv(os.path.join(tile_dir, key + "_bdata.csv"))
             for i, crs in enumerate(self.CRS):
                 polygon = Polygon(
                     list(zip(df["x{:03d}".format(i)], df["y{:03d}".format(i)]))
@@ -248,14 +268,14 @@ class tiler(object):
         # df = df.assign(crs=self.crs_strings)
         # header
         # header = ['{}={}'.format(v) for v in [self.]]
-        # df.to_csv(join(tile_dir, 'slices_crs_scalars.csv'))
+        # df.to_csv(os.path.join(tile_dir, 'slices_crs_scalars.csv'))
         various = {
             "slices": df,
             "crs_strings": self.crs_strings,
             "global_domain_size": self.global_domain_size,
             "N_tiles": self.N_tiles,
         }
-        with open(join(tile_dir, "various.p"), "wb") as f:
+        with open(os.path.join(tile_dir, "various.p"), "wb") as f:
             pickle.dump(various, f)
 
         # boundary data
@@ -267,7 +287,7 @@ class tiler(object):
                 ],
                 axis=1,
             )
-            df.to_csv(join(tile_dir, key + "_bdata.csv"))
+            df.to_csv(os.path.join(tile_dir, key + "_bdata.csv"))
 
         print("Tiler stored in {}".format(tile_dir))
 
@@ -365,6 +385,28 @@ class tiler(object):
         if persist:
             ds = ds.persist()
         return ds
+    
+    def create_tile_run_tree(self, run_dir, overwrite=False):
+        """ Create a tree of directory for the run
+        run_root_dir/run/data_000/ , ...
+        """
+        dirs = {t: os.path.join(run_dir, "data_{:03d}".format(t))
+                for t in range(self.N_tiles)}
+        for t, tile_dir in dirs.items():
+            _create_dir(tile_dir, overwrite)
+        self.run_dirs = dirs
+        #return dirs
+        
+    def clean_up(self, run_dir, step):
+        """ Clean up netcdf files older than step
+        """
+        for t in range(self.N_tiles):
+            ncfiles = glob(os.path.join(run_dir, "data_{:03d}/*.nc".format(t)))
+            for f in ncfiles:
+                f_step = f.split('/')[-1].split('_')[1]
+                if int(f_step)>=step:
+                    print('delete {}'.format(f))
+                    os.remove(f)        
 
 
 def tile_domain(N, factor, overlap, wrap=False):
@@ -443,11 +485,11 @@ def polygon_to_dataframe(polygon, suffix=""):
 def _check_tile_directory(tile_dir, create):
     """Check existence of a directory and create it if necessary"""
     # create diagnostics dir if not present
-    if not path.isdir(tile_dir):
+    if not os.path.isdir(tile_dir):
         if create:
             # need to create the directory
             os.mkdir(tile_dir)
-            print("Create new diagnostic directory {}".format(tile_dir))
+            print("Create new tile directory {}".format(tile_dir))
         else:
             raise OSError("Directory does not exist")
 
@@ -494,11 +536,13 @@ def generate_randomly_located_data(lon=(0, 180), lat=(0, 90), N=1000):
     return geopandas.GeoSeries(points, crs=crs_wgs84)
 
 
-def tile_store_llc(ds, time_slice, tl, tile_data_dirs, persist=False, netcdf=False):
+def tile_store_llc(ds, time_slice, tl, persist=False, netcdf=False):
+    """ 
+    """
 
-    # tslice = slice(t, t+dt_windows*24, None)
+    # tslice = slice(t, t+dt_window*24, None)
     # ds_tsubset = ds.isel(time=time_slice)
-    # extract time slice for dt_windows
+    # extract time slice for dt_window
     ds_tsubset = ds.sel(time=time_slice)
     # convert faces structure to global lat/lon structure
     if "face" in ds_tsubset.dims:
@@ -527,15 +571,15 @@ def tile_store_llc(ds, time_slice, tl, tile_data_dirs, persist=False, netcdf=Fal
         ds_tsubset = ds_tsubset.persist()
 
     D = tl.tile(ds_tsubset, persist=False)
-    # rechunk={'time': 2}
 
     ds_tiles = []
-    for tile, ds_tile in enumerate(tqdm(D)):
+    #for tile, ds_tile in enumerate(tqdm(D)):
+    for tile, ds_tile in enumerate(D):
         # i_g -> i, j->j_g and shift
         # ds_tile = fuse_dimensions(ds_tile)
         #
         if netcdf:
-            nc_file = join(tile_data_dirs[tile], "llc.nc")
+            nc_file = os.path.join(tl.run_dirs[tile], "llc.nc")
             ds_tile.to_netcdf(nc_file, mode="w")
             ds_tiles.append(None)
         else:
@@ -576,26 +620,43 @@ class run(object):
         self,
         tile,
         tl,
-        tile_data_dirs,
         ds,
         step,
         starttime,
         endtime,
-        dt_windows,
+        dt_window,
+        dt_step,
+        dt_out,
         pclass="jit",
+        id_max=None,
         netcdf=False,
+        verbose=0,
     ):
 
         self.tile = tile
         self.tl = tl
-        self.run_dir = tile_data_dirs[tile]
-        self._tile_dirs = tile_data_dirs
+        self.run_dir = tl.run_dirs[tile]
+        self._tile_run_dirs = tl.run_dirs
         self.pclass = pclass
         self.step = step
+
         self.starttime = starttime
         self.endtime = endtime
-        self.dt_windows = dt_windows
+        
+        self.dt_step = dt_step
+        self.dt_window = dt_window
+        self.dt_out = dt_out
+        
+        self.id_max = id_max
+        
+        self.verbose = verbose
 
+        if self.verbose>0:
+            print('starttime =', starttime)
+            print('endtime =', endtime)
+            print('dt_window =', dt_window)
+            print('dt_step =', dt_step)
+                
         # load fieldset
         self.init_field_set(ds, netcdf)
         # step_window would call such object
@@ -604,7 +665,7 @@ class run(object):
 
     def __getitem__(self, item):
         if item in ["lon", "lat", "id"]:
-            return self.pset.particle_data[item]
+            return self.pset.collection.data[item]
         elif item == "size":
             return self.pset.size
 
@@ -615,13 +676,23 @@ class run(object):
         variables = {
             "U": "SSU",
             "V": "SSV",
-            "waterdepth": "Depth",
         }
+        #    "waterdepth": "Depth",
+        _standard_dims = {"lon": "XC", "lat": "YC", "time": "time"}
         dims = {
-            "U": {"lon": "XC", "lat": "YC", "time": "time"},
-            "V": {"lon": "XC", "lat": "YC", "time": "time"},
-            "waterdepth": {"lon": "XC", "lat": "YC"},
+            "U": _standard_dims,
+            "V": _standard_dims,
         }
+        #    "waterdepth": {"lon": "XC", "lat": "YC"},
+        if self.pclass=='extended':
+            variables.update({"sea_level": "Eta",
+                             "temperature": "SST",
+                             "salinity": "SSS"}
+                            )
+            dims.update({"sea_level": _standard_dims,
+                         "temperature": _standard_dims,
+                         "salinity": _standard_dims,
+                        })
         if netcdf == False:
             fieldset = FieldSet.from_xarray_dataset(
                 ds,
@@ -639,7 +710,7 @@ class run(object):
             )
         self.fieldset = fieldset
 
-    def init_particles_t0(self, ds, dij):
+    def init_particles(self, ds, dij, debug=None):
         """Initial particle positions"""
         tile, tl, fieldset = self.tile, self.tl, self.fieldset
 
@@ -651,10 +722,12 @@ class run(object):
             .reset_coords()
         )
         x = x.where(x.Depth > 0, drop=True)
-        xv, yv = x.XC.values, x.YC.values
         # use tile to select points within the tile (most time conssuming operation)
+        xv, yv = x.XC.values, x.YC.values
         in_tile = tl.assign(lon=xv, lat=yv, tiles=[tile])
         xv, yv = xv[in_tile[in_tile == tile].index], yv[in_tile[in_tile == tile].index]
+        # store initial positions along with relevant surounding area
+        # will be store in the first file, just need a mechanism to read them back
         #
         pset = None
         if xv.size > 0:
@@ -663,126 +736,132 @@ class run(object):
                 fieldset=fieldset,
                 pclass=self.particle_class,
                 lon=xv.flatten(),
-                lat=yv.flatten(),  # ** add index such as
-                # pid_orig = np.arange(xv.flatten().size)+(tile*100000),
+                lat=yv.flatten(),
             )
-
+            # pid_orig = np.arange(xv.flatten().size)+(tile*100000),
+        # offset parcel id's such as to make sure they do not overlap
         if pset is not None:
             if pset.size > 0:
-                pset.particle_data["id"] = pset.particle_data["id"] + int(tile * 1e6)
+                pset.collection.data["id"] = pset.collection.data["id"] + int(tile * 1e6)           
+        # initial value of id_max
+        self.id_max = max(pset.collection.data["id"])
+
         self.pset = pset
-        
-        if 3000002.0 in pset.particle_data["id"]:
-            index = np.argmin(np.abs(np.array(pset.particle_data["id"]) - 3000002.0))
-            print(
-                "init_particle_t0:",
-                tile,
-                pset.particle_data["id"][index],
-                pset.particle_data["lon"][index],
-                pset.particle_data["lat"][index],
-            )
-        del pset
 
-    def init_particles_restart(self, step):
-        """reload data from previous runs"""
+    def init_particles_restart(self, seed=False):
+        """Reload data from previous runs"""
         tile, tl, fieldset = self.tile, self.tl, self.fieldset
-
+        
         # load parcel file from previous runs
-
         self.particle_class.setLastID(0)
         pset = ParticleSet(fieldset=self.fieldset, pclass=self.particle_class)
         for _tile in range(tl.N_tiles):
-            ncfile = self.nc(step - 1, _tile)
+            ncfile = self.nc(step=self.step - 1, tile=_tile)
             if os.path.isfile(ncfile):
-                particle_class = _get_particle_class(self.pclass)
-                particle_class.setLastID(0)
+                #particle_class = _get_particle_class(self.pclass)
+                particle_class = self.particle_class
+                #particle_class.setLastID(0)
                 _pset = ParticleSet.from_particlefile(
                     fieldset,
-                    pclass=particle_class,
-                    filename=ncfile,
-                    restarttime=self.starttime,
+                    particle_class,
+                    ncfile,
+                    restart=True,
+                    restarttime = np.datetime64(self.starttime),
                 )
-
-                df = pd.read_csv(self.csv(step - 1, tile=_tile), index_col=0)
+                df = pd.read_csv(self.csv(step=self.step - 1, tile=_tile), index_col=0)
                 df_not_in_tile = df.loc[df["tile"] != tile]
                 if df_not_in_tile.size > 0:
                     boolind = np.array(
                         [
-                            _pset.particle_data["id"][i] in df_not_in_tile["id"].values
-                            for i in range(_pset.size)
+                            i in df_not_in_tile["id"].values
+                            for i in _pset.collection.data["id"]
                         ]
                     )
-                    # _pset.remove_indices(list(df_not_in_tile.index))
                     _pset.remove_booleanvector(boolind)
-                    del boolind
                 if _pset.size > 0:
                     pset.add(_pset)
-                del df
-                del df_not_in_tile
-                del _pset
 
         # could add particle here based on density
-        
+        ncfile = self.nc(step=0)
+        if seed and os.path.isfile(ncfile):
+            # load initial parcel position for this tile and compute parcel separation
+            ds = xr.open_dataset(ncfile).isel(obs=0)
+            lon_init, lat_init = ds.lon.values, ds.lat.values
+            separation_init = [nsmallest(2, haversine(lon, lat, lon_init, lat_init))[1] 
+                               for lon, lat in zip(lon_init, lat_init)
+                              ]
+            lon_last, lat_last = pset.collection.data["lon"], pset.collection.data["lat"]
+            seed_positions = [(lon, lat) for lon, lat, s_init in 
+                              zip(lon_init, lat_init, separation_init) 
+                              if ((lon_last.size==0)
+                                  or min(haversine(lon, lat, lon_last, lat_last))>s_init
+                                 )
+                             ]
+            if seed_positions:
+                self.particle_class.setLastID(0)
+                lon, lat = list(zip(*seed_positions))
+                _pset = ParticleSet(
+                    fieldset=fieldset,
+                    pclass=self.particle_class,
+                    lon=lon,
+                    lat=lat,
+                )
+                # update index to prevent any overlap
+                _pset.collection.data["id"] = _pset.collection.data["id"] + 1 + self.id_max
+                self.id_max = max(_pset.collection.data["id"])
+                pset.add(_pset)
                 
         self.pset = pset
-        if 3000002.0 in pset.particle_data["id"]:
-            index = np.argmin(np.abs(np.array(pset.particle_data["id"]) - 3000002.0))
-            print(
-                "init_particle_restart:",
-                tile,
-                pset.particle_data["id"][index],
-                pset.particle_data["lon"][index],
-                pset.particle_data["lat"][index],
-            )
-        del pset
+        
+    def execute(self, advection=None):
 
-    # def execute(self, T, step,
-    def execute(
-        self,
-        endtime,
-        step,
-        dt_step=timedelta(hours=1.0),
-        dt_out=timedelta(hours=1.0),
-        advection="euler",
-    ):
-
+        pset = self.pset
+                
         if advection == "euler":
             adv = AdvectionEE
         else:
             adv = AdvectionRK4
-
-        pset = self.pset
-
+        if self.pclass=="extended":
+            kernel = Extended_Sample + pset.Kernel(adv)
+        else:
+            kernel = adv
+        
         # if pset.size>0:
         if pset is not None:
             if pset.size > 0:
-                file_out = pset.ParticleFile(self.nc(step), outputdt=dt_out)
+                file_out = pset.ParticleFile(self.nc(), 
+                                             outputdt=self.dt_out,
+                                            )
                 pset.execute(
-                    adv,
-                    endtime=endtime,
-                    dt=dt_step,
+                    pyfunc=kernel,
+                    endtime=self.endtime,
+                    dt=self.dt_step,
                     recovery={ErrorCode.ErrorOutOfBounds: DeleteParticle},
                     output_file=file_out,
                     postIterationCallbacks=[self.SaveCsv],
-                    callbackdt=self.dt_windows,
+                    callbackdt=self.dt_window,
                 )
 
                 # force converting temporary npy directory to netcdf file
                 file_out.export()
 
-    def nc(self, step, tile=None):
+    def nc(self, step=None, tile=None):
+        if step is None:
+            step = self.step
         if tile is None:
             tile = self.tile
-        tile_dir = self._tile_dirs[tile]
+        tile_dir = self._tile_run_dirs[tile]
         file = "floats_{:03d}_{:03d}.nc".format(step, tile)
-        return join(tile_dir, file)
+        return os.path.join(tile_dir, file)
 
-    def csv(self, step, tile=None):
+    def csv(self, step=None, tile=None):
+        if step is None:
+            step = self.step
         if tile is None:
             tile = self.tile
-        tile_dir = self._tile_dirs[tile]
+        tile_dir = self._tile_run_dirs[tile]
         file = "floats_assigned_{:03d}_{:03d}.csv".format(step, tile)
-        return join(tile_dir, file)
+        return os.path.join(tile_dir, file)
 
     def SaveCsv(self):
         if self.pset is not None:
@@ -792,20 +871,7 @@ class run(object):
             float_tiles = float_tiles.to_frame(name="tile")
             float_tiles["id"] = self["id"]
             float_tiles = float_tiles.drop_duplicates(subset=["id"])
-            float_tiles.to_csv(self.csv(self.step))
-            del float_tiles
-        if 3000002.0 in self.pset.particle_data["id"]:
-            index = np.argmin(
-                np.abs(np.array(self.pset.particle_data["id"]) - 3000002.0)
-            )
-            print(
-                "SaveCsv:",
-                self.tile,
-                self.pset.particle_data["id"][index],
-                self.pset.particle_data["lon"][index],
-                self.pset.particle_data["lat"][index],
-            )
-
+            float_tiles.to_csv(self.csv())
 
 def _get_particle_class(pclass):
     # if pclass=='llc':
@@ -815,12 +881,22 @@ def _get_particle_class(pclass):
     elif pclass == "scipy":
         # not working at all at the moment
         return ScipyParticle
+    elif pclass == "extended":
+        return Particle_extended
 
+class Particle_extended(JITParticle):
+    sea_level = Variable('sea_level', dtype=np.float32)
+    temperature = Variable('temperature', dtype=np.float32)
+    salinity = Variable('salinity', dtype=np.float32)
+    
+def Extended_Sample(particle, fieldset, time):
+    particle.sea_level = fieldset.sea_level[time, particle.depth, particle.lat, particle.lon]
+    particle.temperature = fieldset.temperature[time, particle.depth, particle.lat, particle.lon]
+    particle.salinity = fieldset.salinity[time, particle.depth, particle.lat, particle.lon]
 
 # Make sure to remove the floats that start on land
 def DeleteParticle(particle, fieldset, time):
     particle.delete()
-
 
 def RemoveOnLand(particle, fieldset, time):
     u, v = fieldset.UV[time, particle.depth, particle.lat, particle.lon]
@@ -829,20 +905,23 @@ def RemoveOnLand(particle, fieldset, time):
     # if math.fabs(particle.depth) < 500:
     if math.fabs(u) < 1e-12 and math.fabs(v) < 1e-12:
         particle.delete()
-
-
+        
 def step_window(
     tile,
     step,
     starttime,
     endtime,
-    dt_windows,
+    dt_window,
+    dt_step,
+    dt_out,
     tl,
-    run_dir,
     ds_tile=None,
     init_dij=10,
     parcels_remove_on_land=True,
     pclass="jit",
+    id_max=None,
+    seed=False,
+    verbose=0,
 ):
     """timestep parcels within one tile (tile) and one time window (step)
     
@@ -852,59 +931,50 @@ def step_window(
         step:
         starttime:
         endtime:
-        dt_windows:
+        dt_window:
         tl:
         run_dir:
         ds_tile:
         init_dij:
         parcels_remove_on_land: boolean, optional
         pclass: str, optional
+        verbose: int, optional
         
     """
 
     # https://docs.dask.org/en/latest/scheduling.html
     # reset dask cluster locally
     dask.config.set(scheduler="threads")
-    # from dask.distributed import Client
-    # client = Client()
 
     # directory where tile data is stored
-    tile_data_dirs = [
-        join(run_dir, "data_{:03d}".format(t)) for t in range(tl.N_tiles)
-    ]
-    tile_dir = tile_data_dirs[tile]
+    tile_dir = tl.run_dirs[tile]
     ds = ds_tile
     if ds is None:
         # "load" data either via pointer or via file reading
         # ds = D[tile] #.compute() # compute necessary?
         #
-        llc = join(tile_dir, "llc.nc")
+        llc = os.path.join(tile_dir, "llc.nc")
         ds = xr.open_dataset(llc, chunks={"time": 1})
 
     # init run object
-    prun = run(tile, tl, tile_data_dirs, ds, step, starttime, endtime, dt_windows)
+    prun = run(tile, tl, ds, 
+               step,
+               starttime, endtime, dt_window,
+               dt_step, dt_out,
+               id_max=id_max,
+               verbose=verbose,
+               pclass=pclass,
+              )
+    #if debug==1:
+    #    return prun
 
     # load drifter positions
     if step == 0:
-        prun.init_particles_t0(ds, init_dij)
+        prun.init_particles(ds, init_dij)
     else:
-        prun.init_particles_restart(step)
-
-    # if 3000002.0 in prun.pset.particle_data['id']:
-    if tile == 23 or tile == 3:
-        index = np.argmin(np.abs(np.array(prun.pset.particle_data["id"]) - 3000002.0))
-        print(
-            "step_window before land:tile,id,lon,lat,depth=",
-            tile,
-            prun.pset.particle_data["id"][index],
-            prun.pset.particle_data["lon"][index],
-            prun.pset.particle_data["lat"][index],
-            prun.pset.particle_data["depth"][index],
-        )
-        print("step_window before land:", ds["XC"].values.min(), ds["XC"].values.max())
-        print("step_window before land:", ds["YC"].values.min(), ds["YC"].values.max())
-        print("step_window before land:size=", prun.pset.particle_data["id"].size)
-    # ** to do: make sure we are not loosing particles
+        prun.init_particles_restart(seed)
+    #if debug==2:
+    #    return prun
 
     # if parcels_remove_on_land and prun.pset.size>0:
     if parcels_remove_on_land and prun.pset is not None:
@@ -916,48 +986,44 @@ def step_window(
             )
     # 2.88 s for 10x10 tiles and dij=10
 
-    if tile == 23 or tile == 3:
-        index = np.argmin(np.abs(np.array(prun.pset.particle_data["id"]) - 3000002.0))
-        print(
-            "step_window after land:",
-            tile,
-            prun.pset.particle_data["id"][index],
-            prun.pset.particle_data["lon"][index],
-            prun.pset.particle_data["lat"][index],
-        )
-        print("step_window after land:", prun.pset.particle_data["id"].size)
-
     # perform the parcels simulation
-    # ** try AdvectionRK4 instead of AdvectionEE
-    # prun.execute(dt_windows, step)
-    prun.execute(endtime, step)
-    # if 3000002.0 in prun.pset.particle_data['id']:
-    if tile == 23 or tile == 3:
-        index = np.argmin(np.abs(np.array(prun.pset.particle_data["id"]) - 3000002.0))
-        print(
-            "step_window after execute:",
-            tile,
-            prun.pset.particle_data["id"][index],
-            prun.pset.particle_data["lon"][index],
-            prun.pset.particle_data["lat"][index],
-        )
-        print("step_window after execute:", prun.pset.particle_data["id"].size)
-    # prun.execute(dt_windows, step, advection='RK4')
+    prun.execute()
+    
+    # extract useful information
+    parcel_number = prun.pset.collection.data["id"].size
+    id_max = prun.id_max
+    
+    return parcel_number, id_max
 
-    # assign to tiles and store
-    # if prun.pset is not None:
-    #    # sort floats per tiles
-    #    float_tiles = tl.assign(lon=prun['lon'], lat=prun['lat'])
-    #    # store to csv
-    #    float_tiles = float_tiles.to_frame(name='tile')
-    #    float_tiles['id'] = prun['id']
-    #    float_tiles = float_tiles.drop_duplicates(subset=['id'])
-    #    float_tiles.to_csv(prun.csv(step))
-    #    del float_tiles
-    del ds
-    del prun
-    # gc.collect()
-    return
+def name_log_file(run_dir):
+    now = datetime.now().strftime("%Y%m%d_%H%M")
+    return os.path.join(run_dir, 'log_'+now+'.yaml')
+
+def store_log(log_file, step, data):
+    """ Store log data in log file
+    Parameters:
+    -----------
+        log_file: str
+        step: int
+        data: dict
+    """
+    if os.path.isfile(log_file):
+        with open(log_file,'r') as yamlfile:
+            cur_yaml = yaml.safe_load(yamlfile)
+        cur_yaml.update({step: data})
+    else:
+        cur_yaml = {step: data}
+    with open(log_file,'w') as yamlfile:
+        yaml.safe_dump(cur_yaml, yamlfile)
+
+def browse_log_files(run_dir):
+    log_files = sorted(glob(os.path.join(run_dir, 'log_*yaml')))
+    log = {}
+    if log_files:
+        for f in log_files:
+            with open(f,'r') as yamlfile:
+                log.update(yaml.safe_load(yamlfile))
+    return log
 
 
 # ------------------------------ netcdf floats relative ---------------------------------------
@@ -988,16 +1054,11 @@ def load_cdf(
         return ds.to_dataframe().set_index(index)
 
     # find list of tile directories
-    # tile_dir = join(run_dir,'tiling/')
-    # tl = tiler(tile_dir=tile_dir)
-    # tile_data_dirs = [join(run_dir,'data_{:03d}'.format(t))
-    #                  for t in range(tl.N_tiles)
-    #                 ]
-    tile_data_dirs = glob(run_dir + "/data_*")
+    tile_run_dirs = glob(run_dir + "/data_*")
 
     # find list of netcdf float files
     float_files = []
-    for _dir in tile_data_dirs:
+    for _dir in tile_run_dirs:
         float_files.extend(sorted(glob(_dir + "/floats_" + step_tile + ".nc")))
 
     # read the netcdf files and store in a dask dataframe
@@ -1064,7 +1125,7 @@ def store_parquet(
             return
     if sub_dir is None:
         sub_dir = 'parquets'
-    parquet_path = join(run_dir, sub_dir, name)
+    parquet_path = os.path.join(run_dir, sub_dir, name)
 
     # check wether an archive already exists
     if os.path.isdir(parquet_path):
@@ -1103,7 +1164,7 @@ def load_parquet(
         run_dir: str, path to the simulation (containing the drifters directory)
         index: str, to set the path and load a dataframe with the right index
     """
-    parquet_path = join(run_dir, "drifters", index)
+    parquet_path = os.path.join(run_dir, "drifters", index)
 
     # test if parquet
     if os.path.isdir(parquet_path):
@@ -1127,10 +1188,10 @@ class parcels_output(object):
         """
         self.run_dir = run_dir
         # explore tree and load relevant data
-        tile_dir = join(run_dir, 'tiling/')
+        tile_dir = os.path.join(run_dir, 'tiling/')
         if os.path.isdir(tile_dir):
             self.tiler = tiler(tile_dir=tile_dir)
-        parquet_dir = join(run_dir, 'parquets/')
+        parquet_dir = os.path.join(run_dir, 'parquets/')
         if os.path.isdir(parquet_dir):
             parquet_paths = glob(parquet_dir+'*')
             self.parquets = {p.split('/')[-1]: p for p in parquet_paths}
@@ -1145,7 +1206,7 @@ class parcels_output(object):
                     _df = _df.persist()
                 self.df[p] = _df
         #
-        self.diagnostic_dir = join(self.run_dir,'diagnostics')
+        self.diagnostic_dir = os.path.join(self.run_dir,'diagnostics')
                 
     ### store/load diagnostics
     def store_diagnostic(self, name, data, 
@@ -1186,7 +1247,7 @@ class parcels_output(object):
                          )
         if isinstance(data, xr.Dataset):
             # store to zarr format
-            zarr_path = join(_dir,name+'.zarr')
+            zarr_path = os.path.join(_dir,name+'.zarr')
             write_kwargs = dict(kwargs)
             if overwrite:
                 write_kwargs.update({'mode': 'w'})
@@ -1212,7 +1273,7 @@ class parcels_output(object):
             Any keyword arguments that will be passed to the file reader
         """
         _dir = _check_diagnostic_directory(directory, self.run_dir)
-        data_path = join(_dir, name)
+        data_path = os.path.join(_dir, name)
         # find the diagnostic file
         if os.path.isdir(data_path):
             if '.' not in name:
@@ -1236,13 +1297,13 @@ def _check_diagnostic_directory(directory, dirname,
     if os.path.isdir(directory):
         # directory is an absolute path
         _dir = directory
-    elif os.path.isdir(join(dirname, directory)):
+    elif os.path.isdir(os.path.join(dirname, directory)):
         # directory is relative
-        _dir = join(dirname, directory)
+        _dir = os.path.join(dirname, directory)
     else:
         if create:
             # need to create the directory
-            _dir = join(dirname, directory)
+            _dir = os.path.join(dirname, directory)
             os.mkdir(_dir)
             print('Create new diagnostic directory {}'.format(_dir))
         else:
