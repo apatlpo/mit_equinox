@@ -32,21 +32,25 @@ from .drifters import haversine
 
 # ------------------------------- dir tree management ------------------------------
 
-def create_dir_tree(root_dir, run_name, overwrite=False):
+def create_dir_tree(root_dir, run_name, overwrite=False, verbose=True):
     """ Create run directory tree based on a root_dir and run_name
+    Parameters
+    ----------
+    
     """
     run_root_dir = os.path.join(root_dir, run_name)
-    _create_dir(run_root_dir, overwrite)
+    _create_dir(run_root_dir, overwrite, verbose=verbose)
     dirs = {"run_root": run_root_dir}
     #
     for sub_dir in ["run", "tiling", "parquets", "diagnostics"]:
         dirs[sub_dir] = os.path.join(run_root_dir, sub_dir)
-        _create_dir(dirs[sub_dir], overwrite)
+        _create_dir(dirs[sub_dir], overwrite, verbose=verbose)
     return dirs
 
-def _create_dir(directory, overwrite):
+def _create_dir(directory, overwrite, verbose=True):
     if os.path.isdir(directory) and not overwrite:
-        print('Not overwriting {}'.format(directory))
+        if verbose:
+            print('Not overwriting {}'.format(directory))
     else:
         shutil.rmtree(directory, ignore_errors=True)
         os.mkdir(directory)    
@@ -81,6 +85,18 @@ class tiler(object):
         N_extra=1000,
     ):
         """ Object handling a custom tiling of global llc data
+        Parameters
+        ----------
+            ds: xr.Dataset, optional
+            factor: tuple, optional
+                Reduction factor in i and j directions
+            overlap: tuple, optional
+                Number of points that overlap over each domain
+            tile_dir: 
+            name: str
+                
+            N_extra: int
+                number of extra points added around the dateline
         """
         if ds is not None:
             self._build(ds, factor, overlap, N_extra)
@@ -102,7 +118,7 @@ class tiler(object):
         factor: tuple
             Number of tiles along each dimensions, e.g. (4,4)
         overlap: tuple
-            Fraction of overlap
+            Fraction of overlap in number of points
         N_extra: int
             number of extra points added around the dateline
         """
@@ -554,7 +570,9 @@ def tile_store_llc(ds, time_slice, tl, persist=False, netcdf=False):
         ds_tsubset = llc.faces_dataset_to_latlon(ds_tsubset).drop("face")
 
     # add N_extra points along longitude to allow wrapping around dateline
-    ds_extra = ds_tsubset.isel(i=slice(0, tl.N_extra), i_g=slice(0, tl.N_extra))
+    ds_extra = ds_tsubset.isel(i=slice(0, tl.N_extra), 
+                               i_g=slice(0, tl.N_extra)
+                              )
     for dim in ["i", "i_g"]:
         ds_extra[dim] = ds_extra[dim] + ds_tsubset[dim][-1] + 1
     ds_tsubset = xr.merge(
@@ -575,9 +593,6 @@ def tile_store_llc(ds, time_slice, tl, persist=False, netcdf=False):
     ds_tiles = []
     #for tile, ds_tile in enumerate(tqdm(D)):
     for tile, ds_tile in enumerate(D):
-        # i_g -> i, j->j_g and shift
-        # ds_tile = fuse_dimensions(ds_tile)
-        #
         if netcdf:
             nc_file = os.path.join(tl.run_dirs[tile], "llc.nc")
             ds_tile.to_netcdf(nc_file, mode="w")
@@ -633,6 +648,8 @@ class run(object):
         verbose=0,
     ):
 
+        self.empty = True
+                
         self.tile = tile
         self.tl = tl
         self.run_dir = tl.run_dirs[tile]
@@ -646,7 +663,7 @@ class run(object):
         self.dt_step = dt_step
         self.dt_window = dt_window
         self.dt_out = dt_out
-        
+                
         self.id_max = id_max
         
         self.verbose = verbose
@@ -664,6 +681,8 @@ class run(object):
         self.particle_class = _get_particle_class(pclass)
 
     def __getitem__(self, item):
+        if self.empty:
+            return
         if item in ["lon", "lat", "id"]:
             return self.pset.collection.data[item]
         elif item == "size":
@@ -693,20 +712,22 @@ class run(object):
                          "temperature": _standard_dims,
                          "salinity": _standard_dims,
                         })
-        if netcdf == False:
+        if netcdf:
+            fieldset = FieldSet.from_netcdf(
+                netcdf,
+                variables=variables,
+                dimensions=dims,
+                interp_method="cgrid_velocity",
+            )
+        else:
+            #ds = ds.compute() # test to see if it decreases memory usage, nope
             fieldset = FieldSet.from_xarray_dataset(
                 ds,
                 variables=variables,
                 dimensions=dims,
                 interp_method="cgrid_velocity",
                 allow_time_extrapolation=True,
-            )
-        else:
-            fieldset = FieldSet.from_netcdf(
-                netcdf,
-                variables=variables,
-                dimensions=dims,
-                interp_method="cgrid_velocity",
+                
             )
         self.fieldset = fieldset
 
@@ -743,8 +764,11 @@ class run(object):
         if pset is not None:
             if pset.size > 0:
                 pset.collection.data["id"] = pset.collection.data["id"] + int(tile * 1e6)           
-        # initial value of id_max
-        self.id_max = max(pset.collection.data["id"])
+            # initial value of id_max
+            self.id_max = max(pset.collection.data["id"])
+            self.empty = False
+        else:
+            self.id_max = -1
 
         self.pset = pset
 
@@ -810,11 +834,17 @@ class run(object):
                 _pset.collection.data["id"] = _pset.collection.data["id"] + 1 + self.id_max
                 self.id_max = max(_pset.collection.data["id"])
                 pset.add(_pset)
-                
+        
+        if pset.size>0:
+            self.empty=False
+        
         self.pset = pset
         
     def execute(self, advection=None):
 
+        if self.empty:
+            return
+        
         pset = self.pset
                 
         if advection == "euler":
@@ -838,9 +868,10 @@ class run(object):
                     dt=self.dt_step,
                     recovery={ErrorCode.ErrorOutOfBounds: DeleteParticle},
                     output_file=file_out,
-                    postIterationCallbacks=[self.SaveCsv],
+                    postIterationCallbacks=[self.store_to_csv],
                     callbackdt=self.dt_window,
                 )
+                # could add garbage collection in postIterationCallbacks, see: https://github.com/OceanParcels/parcels/issues/607
 
                 # force converting temporary npy directory to netcdf file
                 file_out.export()
@@ -863,7 +894,7 @@ class run(object):
         file = "floats_assigned_{:03d}_{:03d}.csv".format(step, tile)
         return os.path.join(tile_dir, file)
 
-    def SaveCsv(self):
+    def store_to_csv(self):
         if self.pset is not None:
             # sort floats per tiles
             float_tiles = self.tl.assign(lon=self["lon"], lat=self["lat"])
@@ -885,11 +916,18 @@ def _get_particle_class(pclass):
         return Particle_extended
 
 class Particle_extended(JITParticle):
+    zonal_velocity = Variable('zonal_velocity', dtype=np.float32)
+    meridional_velocity = Variable('meridional_velocity', dtype=np.float32)
+    #
     sea_level = Variable('sea_level', dtype=np.float32)
     temperature = Variable('temperature', dtype=np.float32)
     salinity = Variable('salinity', dtype=np.float32)
     
 def Extended_Sample(particle, fieldset, time):
+    particle.zonal_velocity, particle.meridional_velocity = fieldset.UV[time, particle.depth, particle.lat, particle.lon]
+    #particle.zonal_velocity = fieldset.U[time, particle.depth, particle.lat, particle.lon]
+    #particle.meridional_velocity = fieldset.V[time, particle.depth, particle.lat, particle.lon]
+    #
     particle.sea_level = fieldset.sea_level[time, particle.depth, particle.lat, particle.lon]
     particle.temperature = fieldset.temperature[time, particle.depth, particle.lat, particle.lon]
     particle.salinity = fieldset.salinity[time, particle.depth, particle.lat, particle.lon]
@@ -990,7 +1028,10 @@ def step_window(
     prun.execute()
     
     # extract useful information
-    parcel_number = prun.pset.collection.data["id"].size
+    if prun.empty:
+        parcel_number=0
+    else:
+        parcel_number = prun.pset.collection.data["id"].size
     id_max = prun.id_max
     
     return parcel_number, id_max
@@ -1025,11 +1066,51 @@ def browse_log_files(run_dir):
                 log.update(yaml.safe_load(yamlfile))
     return log
 
+def load_logs(root_dir, run_name):
+    """ Browse run and load basic information (global float number, etc ...)
+    Parameters
+    
+    
+    """
+    dirs = create_dir_tree(root_dir, run_name, 
+                           overwrite=False, verbose=False
+                          )
+    tl = tiler(tile_dir=dirs["tiling"])
+    log = browse_log_files(dirs['run'])
+    steps = list(log)
+    # massage data
+    da0 = xr.DataArray([d['global_parcel_number'] for step, d in log.items()], 
+                   dims="step", name="global_parcel_number"
+                  ).assign_coords(step=steps)
+    #
+    _D = []
+    for step, d in log.items():
+        _D.append(xr.DataArray(list(d['max_ids'].values()), 
+                               dims="tile", 
+                               name='id_max'),
+                 )
+    da1 = xr.concat(_D, 'step').assign_coords(step=steps)
+    #
+    _D = []
+    #_S = []
+    for step, d in log.items():
+        #if 'local_numbers' in d:
+        _D.append(xr.DataArray(list(d['local_numbers'].values()), 
+                               dims="tile",
+                               name='local_numbers'),
+                 )
+        #_S.append(step)
+    #da2 = xr.concat(_D, 'step').assign_coords(step=_S)
+    da2 = xr.concat(_D, 'step').assign_coords(step=steps)
+    #
+    ds = xr.merge([da0, da1, da2])
+    return ds, dirs
+
 
 # ------------------------------ netcdf floats relative ---------------------------------------
 
 
-def load_cdf(
+def load_nc(
     run_dir,
     step_tile="*",
     index="trajectory",
@@ -1074,12 +1155,11 @@ def load_cdf(
 
 
 def store_parquet(
-    run_dir,
+    parquet_dir,
     df,
     partition_size="100MB",
     index=None,
     overwrite=False,
-    sub_dir=None,
     engine="auto",
     compression="ZSTD",
     name=None,
@@ -1088,8 +1168,8 @@ def store_parquet(
 
     Parameters
     ----------
-        run_dir: str
-            path to the simulation
+        parquet_dir: str
+            path to directory where parquet files will be stored
         df: dask.dataframe
             to be stored
         partition_size: str, optional
@@ -1101,8 +1181,6 @@ def store_parquet(
             name of the parquet archive on disk
         overwrite: bool, optional
             can overwrite or not an existing archive
-        sub_dir: str, optional
-            default is 'parquets'
         engine: str
             engine to store the parquet format
         compression: str
@@ -1123,9 +1201,7 @@ def store_parquet(
         else:
             print('index or name needs to be provided')
             return
-    if sub_dir is None:
-        sub_dir = 'parquets'
-    parquet_path = os.path.join(run_dir, sub_dir, name)
+    parquet_path = os.path.join(parquet_dir, name)
 
     # check wether an archive already exists
     if os.path.isdir(parquet_path):
@@ -1207,7 +1283,10 @@ class parcels_output(object):
                 self.df[p] = _df
         #
         self.diagnostic_dir = os.path.join(self.run_dir,'diagnostics')
-                
+
+    def __getitem__(self, item):
+        return self.df[item]
+        
     ### store/load diagnostics
     def store_diagnostic(self, name, data, 
                          overwrite=False,
@@ -1238,11 +1317,10 @@ class parcels_output(object):
         #
         if isinstance(data, dd.DataFrame):
             # store to parquet
-            store_parquet(self.run_dir, 
+            store_parquet(_dir, 
                           data,
-                            overwrite=overwrite,
-                            name=name,
-                          sub_dir='diagnostics',
+                          overwrite=overwrite,
+                          name=name,
                           **kwargs
                          )
         if isinstance(data, xr.Dataset):

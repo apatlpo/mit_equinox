@@ -201,7 +201,7 @@ def time_window_processing(
         df: Dataframe
             This dataframe represents a drifter time series
         T: float
-            Length of the time windows
+            Length of the time windows, must be in the same units that column "time"
         myfun
             Method that will be applied to each window
         columns: list of str
@@ -219,8 +219,9 @@ def time_window_processing(
             Default is 0.5
         id_label: str, optional
             Label used to identify drifters
-        dt: float, pd.Timedelta, optional
-            Conform time series to some time step
+        dt: float, str
+            Conform time series to some time step, if string must conform to rule option of
+            pandas resample method 
         **myfun_kwargs
             Keyword arguments for myfun
 
@@ -235,26 +236,37 @@ def time_window_processing(
     else:
         assert False, "Cannot find float id"
     #
-    p = df.sort_values("time")
-    p = p.where(p.time.diff() != 0).dropna()
-    p = p.set_index("time")
-    #
-    tmin, tmax = p.index[0], p.index[-1]
-    #
-    dim_x, dim_y, geo = guess_spatial_dims(p)
+    dim_x, dim_y, geo = guess_spatial_dims(df)
     if geo:
-        p = compute_vector(p, lon_key=dim_x, lat_key=dim_y)
+        df = compute_vector(df, lon_key=dim_x, lat_key=dim_y)
+    #
+    # drop duplicated values
+    df = df.drop_duplicates(subset="date")
+    #p = p.where(p.time.diff() != 0).dropna() # duplicates - old   
+    #
+    df = df.sort_values("time")
     #
     if dt is not None:
-        # enforce regular sampling
-        regular_time = np.arange(tmin, tmax, dt)
-        p = p.reindex(regular_time).interpolate()
+        if isinstance(dt, float):
+            # enforce regular sampling
+            tmin, tmax = df.index[0], df.index[-1]
+            tmax = tmin+int((tmax-tmin)/dt)*dt
+            regular_time = np.arange(tmin, tmax, dt)
+            df = df.reindex(regular_time).interpolate()
+        elif isinstance(dt, str):
+            df = df.set_index("date").resample(dt).pad().reset_index()
+            # by default converts to days then
+            dt = pd.Timedelta(dt)/pd.Timedelta('1D')
         if geo:
-            p = compute_lonlat(
-                p,
+            df = compute_lonlat(
+                df,
                 lon_key=dim_x,
                 lat_key=dim_y,
             )
+    #
+    df = df.set_index("time")
+    tmin, tmax = df.index[0], df.index[-1]
+    #
     # need to create an empty dataframe, in case the loop below is empty
     # get column names from fake output:
     myfun_out = myfun(*[None for c in columns], N, dt=dt, **myfun_kwargs)
@@ -264,11 +276,12 @@ def time_window_processing(
     t = tmin
     while t + T < tmax:
         #
-        _p = p.loc[t : t + T].iloc[:-1, :] # last iloc is because pandas include the last date
+        _df = df.loc[t : t + T].iloc[:-1, :]
+        # note: iloc is here because pandas include the last date
         # compute average position
-        x, y = mean_position(_p, Lx=Lx)
+        x, y = mean_position(_df, Lx=Lx)
         # apply myfun
-        myfun_out = myfun(*[_p[c] for c in columns], N, dt=dt, **myfun_kwargs)
+        myfun_out = myfun(*[_df[c] for c in columns], N, dt=dt, **myfun_kwargs)
         # combine with mean position and time
         out.loc[t + T / 2.0] = [x, y] + [dr_id] + list(myfun_out)
         t += T * (1 - overlap)
