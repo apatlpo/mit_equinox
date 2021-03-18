@@ -201,10 +201,12 @@ def plot_pretty(
     colorbar=False,
     colorbar_kwargs={},
     gridlines=True,
+    land=True,
     coast_resolution="110m",
     offline=False,
     figsize=(15, 15),
     savefig=None,
+    **kwargs,
 ):
     #
     if vmin is None:
@@ -241,7 +243,18 @@ def plot_pretty(
         # coastlines and land:
         # if coast_resolution is not None:
         #    ax.coastlines(resolution=coast_resolution, color='k')
-        ax.add_feature(cfeature.LAND, zorder=2)
+        if land:
+            if isinstance(land, dict):
+                land_feature = cfeature.NaturalEarthFeature(*land['args'], 
+                                                            **land['kwargs'],
+                                                           )
+                #land = {'args': ['physical', 'land', '10m'], 
+                #        'kwargs': {edgecolor='face',
+                #                   facecolor=cfeature.COLORS['land'],
+                #                  }}
+            else:
+                land_feature = cfeature.LAND
+            ax.add_feature(land_feature, zorder=2)
         if _extent == "global":
             # _extent = ax.set_extent()
             _extent = ax.get_extent()

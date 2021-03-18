@@ -218,7 +218,7 @@ def get_ij_dims(da):
     i = next((d for d in da.dims if d[0] == "i"))
     j = next((d for d in da.dims if d[0] == "j"))
     return i, j
-
+    
 
 # ------------------------------ enatl60 specific ---------------------------------------
 

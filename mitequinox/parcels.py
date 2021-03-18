@@ -727,7 +727,6 @@ class run(object):
                 dimensions=dims,
                 interp_method="cgrid_velocity",
                 allow_time_extrapolation=True,
-                
             )
         self.fieldset = fieldset
 
@@ -1226,6 +1225,8 @@ def store_parquet(
         df = df.repartition(partition_size=partition_size)
     
     df.to_parquet(parquet_path, engine=engine, compression=compression)
+    
+    return parquet_path
 
 
 def load_parquet(
