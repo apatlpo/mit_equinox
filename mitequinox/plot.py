@@ -1,9 +1,13 @@
 import threading
 
 import matplotlib.pyplot as plt
+import matplotlib.colors as colors
+import matplotlib.cm as cmx
+
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import cartopy.geodesic as cgeo
+
 from cmocean import cm
 
 import numpy as np

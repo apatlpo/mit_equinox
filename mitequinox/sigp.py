@@ -293,6 +293,8 @@ def get_E(v, f=None, **kwargs):
     else:
         Nb = 60 * 24
         kwargs["nperseg"] = Nb
+    if "return_onesided" in kwargs and kwargs["return_onesided"]:
+        Nb = int(Nb/2)+1
     if f is None:
         f, E = _get_E(v.values, ufunc=False, **kwargs)
         return f, E
