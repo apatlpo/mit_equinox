@@ -436,8 +436,63 @@ def get_ij_dims(da):
     i = next((d for d in da.dims if d[0] == "i"))
     j = next((d for d in da.dims if d[0] == "j"))
     return i, j
-    
 
+def removekey(d, key):
+    r = dict(d)
+    del r[key]
+    return r
+
+def custom_distribute(ds, op, tmp_dir=None, suffix=None, root=True, **kwargs):
+    """ Distribute an embarrasingly parallel calculation manually and store chunks to disk
+    
+    Parameters
+    ----------
+    ds: xr.Dataset
+        Input data
+    op: func
+        Process the data and return a dataset
+    tmp_dir: str, optional
+        temporary output directory
+    suffix: str
+        suffix employed for temporary files
+    **kwargs:
+        dimensions with chunk size, e.g. (..., face=1) processes 1 face a time
+    """
+
+    if tmp_dir is None:
+        tmp_dir = scratch
+
+    if suffix is None:
+        suffix="tmp"
+        
+    d = list(kwargs.keys())[0]
+    c = kwargs[d]
+
+    new_kwargs = removekey(kwargs, d)
+
+    dim = ds[d].values
+    chunks = [dim[i*c:(i+1)*c] for i in range((dim.size + c - 1) // c )]
+
+    D = []
+    for c, i in zip(chunks, range(len(chunks))):
+        _ds = ds.isel(**{d: slice(c[0], c[-1]+1)})
+        _suffix = suffix+"_{}".format(i)
+        if new_kwargs:
+            _out = custom_distribute(_ds, op, tmp_dir=tmp_dir, suffix=_suffix, root=False, **new_kwargs)
+            D.append(_out)
+        else:
+            # store
+            out = op(_ds)
+            zarr = os.path.join(tmp_dir, _suffix)
+            out.to_zarr(zarr, mode="w")
+            D.append(xr.open_zarr(zarr))
+            #print("End reached: {}".format(_suffix))
+            
+    # merge results back and return
+    ds = xr.concat(D, d) #positions=chunks
+    
+    return ds
+    
 # ------------------------------ enatl60 specific ---------------------------------------
 
 
