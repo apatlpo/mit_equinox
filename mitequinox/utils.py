@@ -480,6 +480,8 @@ def custom_distribute(ds, op, tmp_dir=None, suffix=None, root=True, **kwargs):
         if new_kwargs:
             _out = custom_distribute(_ds, op, tmp_dir=tmp_dir, suffix=_suffix, root=False, **new_kwargs)
             D.append(_out)
+            if root:
+                print("{}: {}/{}".format(d,i,len(chunks)))
         else:
             # store
             out = op(_ds)
