@@ -197,7 +197,217 @@ def load_common_timeline(V, verbose=True):
         print(df.index[0], " to ", df.index[-1])
     return df
 
+# ------------------------------ diagnosics -----------------------------------
 
+def store_diagnostic(name, data,
+                     overwrite=False,
+                     file_format=None,
+                     directory=None,
+                     auto_rechunk=True,
+                     **kwargs
+                    ):
+    """ Write diagnostics to disk
+    Parameters
+    ----------
+    name: str
+        Name of a diagnostics to store on disk
+    data: xr.Dataset, xr.DataArray (other should be implemented)
+        Data to be stored
+    overwrite: boolean, optional
+        Overwrite an existing diagnostic. Default is False
+    file_format: str, optional
+        Storage file format (supported at the moment: zarr, netcdf)
+    directory: str, optional
+        Directory path where diagnostics will be stored (absolute or relative to output directory).
+        Default is 'diagnostics/'
+    auto_rechunk: boolean, optional
+        Automatically rechunk diagnostics such as o ensure they are not too small.
+        Default is True.
+    **kwargs:
+        Any keyword arguments that will be passed to the file writer
+    """
+    if directory is None:
+        directory = diag_dir
+    # create diagnostics dir if not present
+    _dir = _check_diagnostic_directory(directory)
+    if auto_rechunk:
+        data = _auto_rechunk(data)
+    #
+    if isinstance(data, xr.DataArray):
+        store_diagnostic(name, data.to_dataset(),
+                         overwrite=overwrite,
+                         file_format=file_format,
+                         directory=directory,
+                         auto_rechunk=True,
+                         **kwargs,
+                        )
+    elif isinstance(data, xr.Dataset):
+        success=False
+        if file_format is None or file_format.lower() in ['zarr', '.zarr']:
+            _file = os.path.join(_dir, name+'.zarr')
+            write_kwargs = dict(kwargs)
+            if overwrite:
+                write_kwargs.update({'mode': 'w'})
+            data = _move_singletons_as_attrs(data)
+            data = _reset_chunk_encoding(data)
+            data.to_zarr(_file, **write_kwargs)
+            success=True
+        elif file_format.lower() in ['nc', 'netcdf']:
+            _file = os.path.join(_dir, name+'.nc')
+            write_kwargs = dict(kwargs)
+            if overwrite:
+                write_kwargs.update({'mode': 'w'})
+            data.to_netcdf(_file, **write_kwargs)
+            success=True
+        if success:
+            print('data stored in {}'.format(_file))
+
+def load_diagnostic(name,
+                    directory=None, 
+                    **kwargs):
+    """ Load diagnostics from disk
+    Parameters
+    ----------
+    name: str, list
+        Name of a diagnostics or list of names of diagnostics to load
+    directory: str, optional
+        Directory where diagnostics will be stored (absolute or relative to output directory).
+        Default is 'diagnostics/'
+    **kwargs:
+        Any keyword arguments that will be passed to the file reader
+    """
+    if directory is None:
+        directory = diag_dir
+    _dir = _check_diagnostic_directory(directory)
+    # find the diagnostic file
+    _file = glob(os.path.join(_dir,name+'.*'))
+    assert len(_file)==1, 'More that one diagnostic file {}'.format(_file)
+    _file = _file[0]
+    # get extension
+    _extension = _file.split('.')[-1]
+    if _extension=='zarr':
+        return xr.open_zarr(_file, **kwargs)
+    elif _extension=='nc':
+        return xr.open_dataset(_file, **kwargs)
+    else:
+        raise NotImplementedError('{} extension not implemented yet'
+                                  .format(_extension))
+
+def _check_diagnostic_directory(directory,
+                                create=True,
+                               ):
+    """ Check existence of a directory and create it if necessary
+    
+    Parameters
+    ----------
+    directory: str
+        Path of directory
+    create: boolean
+        Create directory if not there, default is True
+    """
+    # create diagnostics dir if not present
+    if not os.path.isdir(directory):
+        if create:
+            # need to create the directory
+            os.mkdir(directory)
+            print('Create new diagnostic directory {}'.format(directory))
+        else:
+            raise OSError('Directory does not exist')
+    return directory
+
+def _move_singletons_as_attrs(ds, ignore=[]):
+    """ change singleton variables and coords to attrs
+    This seems to be required for zarr archiving
+    """
+    for c,co in ds.coords.items():
+        if co.size==1 and ( len(co.dims)==1 and co.dims[0] not in ignore or len(co.dims)==0 ):
+            value = ds[c].values
+            if isinstance(value, np.datetime64):
+                value = str(value)
+            ds = ds.drop_vars(c).assign_attrs({c: value})
+    for v in ds.data_vars:
+        if ds[v].size==1 and ( len(v.dims)==1 and v.dims[0] not in ignore or len(v.dims)==0 ):
+            ds = ds.drop_vars(v).assign_attrs({v: ds[v].values})
+    return ds
+
+def _reset_chunk_encoding(ds):
+    ''' Delete chunks from variables encoding. 
+    This may be required when loading zarr data and rewriting it with different chunks
+    
+    Parameters
+    ----------
+    ds: xr.DataArray, xr.Dataset
+        Input data
+    '''
+    if isinstance(ds, xr.DataArray):
+        return _reset_chunk_encoding(ds.to_dataset()).to_array()
+    #
+    for v in ds.coords:
+        if 'chunks' in ds[v].encoding:
+            del ds[v].encoding['chunks']
+    for v in ds:
+        if 'chunks' in ds[v].encoding:
+            del ds[v].encoding['chunks']
+    return ds
+        
+def _check_chunks_sizes(da):
+    """ checks that chunk sizes are above the _chunk_size_threshold
+    """
+    averaged_chunk_size, total_size = _get_averaged_chunk_size(da)
+    assert averaged_chunk_size==total_size or averaged_chunk_size>_chunk_size_threshold, \
+        '{} chunks are two small, rechunk such that chunk sizes'.format(da.name) \
+        + ' exceed {} elements on average,'.format(_chunk_size_threshold) \
+        + ' there are currently ' \
+        + '{} points per chunks on average'.format(averaged_chunk_size)
+
+def _get_averaged_chunk_size(da):
+    """ returns the averaged number of elements in the dataset
+    """
+    # total number of elements
+    total_size = int(np.array(list(da.sizes.values())).prod())
+    # averaged number of chunks along each dimension:
+    if da.chunks:
+        chunk_size_dims = np.array([np.max(d) for d in da.chunks])
+        chunk_size = int(chunk_size_dims.prod())
+    else:
+        chunk_size = total_size
+    return chunk_size, total_size
+
+def _auto_rechunk_da(da):
+    """ Automatically rechunk a DataArray such as chunks number of elements
+    exceeds _chunk_size_threshold
+    """
+    dims = ['i', 'i_g', 'j', 'j_g', 'face',
+            'k', 'lon', 'lat', 
+            'time']
+    for d in dims:
+        # gather da number of elements and chunk sizes
+        averaged_chunk_size, total_size = _get_averaged_chunk_size(da)
+        # exit if there is one chunk
+        if averaged_chunk_size==total_size:
+            break
+        # rechunk along dimenion d
+        if (d in da.dims) and averaged_chunk_size<_chunk_size_threshold:
+            dim_chunk_size = np.max(da.chunks[da.get_axis_num(d)])
+            # simple rule of 3
+            factor = max(1, np.ceil(_chunk_size_threshold/averaged_chunk_size))
+            new_chunk_size = int( dim_chunk_size * factor )
+            # bounded by dimension size
+            new_chunk_size = min(da[d].size, new_chunk_size)
+            da = da.chunk({d: new_chunk_size})
+    return da
+
+def _auto_rechunk(ds):
+    """ Wrapper around _auto_rechunk_da for datasets
+    Accepts DataArrays as well however.
+    """
+    if isinstance(ds, xr.DataArray):
+        return _auto_rechunk_da(ds)
+    for k, da in ds.items(): # data_vars
+        ds = ds.assign(**{k: _auto_rechunk_da(da)})
+    for k, da in ds.coords.items():
+        ds = ds.assign_coords(**{k: _auto_rechunk_da(da)})
+    return ds    
 # ------------------------------ misc ---------------------------------------
 
 
