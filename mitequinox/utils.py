@@ -268,6 +268,17 @@ def store_diagnostic(name, data,
         if success:
             print('data stored in {}'.format(_file))
 
+def is_diagnostic(name,
+                  directory=None,
+                 ):
+    """ Indicates whether diagnostic zarr archive exists
+    Obviously does not indicate wether it is complete
+    """
+    if directory is None:
+        directory = diag_dir
+    zarr_dir = os.path.join(directory, name+'.zarr')
+    return os.path.isdir(zarr_dir)
+        
 def load_diagnostic(name,
                     directory=None, 
                     **kwargs):
@@ -474,18 +485,21 @@ def custom_distribute(ds, op, tmp_dir=None, suffix=None, root=True, **kwargs):
     chunks = [dim[i*c:(i+1)*c] for i in range((dim.size + c - 1) // c )]
 
     D = []
+    Z = []
     for c, i in zip(chunks, range(len(chunks))):
         _ds = ds.isel(**{d: slice(c[0], c[-1]+1)})
         _suffix = suffix+"_{}".format(i)
         if new_kwargs:
-            _out = custom_distribute(_ds, op, tmp_dir=tmp_dir, suffix=_suffix, root=False, **new_kwargs)
+            _out, _Z = custom_distribute(_ds, op, tmp_dir=tmp_dir, suffix=_suffix, root=False, **new_kwargs)
             D.append(_out)
             if root:
                 print("{}: {}/{}".format(d,i,len(chunks)))
+            Z.append(_Z)
         else:
             # store
             out = op(_ds)
             zarr = os.path.join(tmp_dir, _suffix)
+            Z.append(zarr)
             out.to_zarr(zarr, mode="w")
             D.append(xr.open_zarr(zarr))
             #print("End reached: {}".format(_suffix))
@@ -493,7 +507,7 @@ def custom_distribute(ds, op, tmp_dir=None, suffix=None, root=True, **kwargs):
     # merge results back and return
     ds = xr.concat(D, d) #positions=chunks
     
-    return ds
+    return ds, Z
     
 # ------------------------------ enatl60 specific ---------------------------------------
 
