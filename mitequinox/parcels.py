@@ -1287,7 +1287,7 @@ class parcels_output(object):
 
     def __getitem__(self, item):
         return self.df[item]
-        
+
     ### store/load diagnostics
     def store_diagnostic(self, name, data, 
                          overwrite=False,
@@ -1367,7 +1367,7 @@ class parcels_output(object):
         else:
             print('{} does not exist'.parquet_path)
   
-                
+        
 def _check_diagnostic_directory(directory, dirname, 
                                 create=False):
     """ Check existence of a directory and create it if necessary
@@ -1481,3 +1481,12 @@ def plot_h3_simple(
     )
     plt.xticks([], [])
     plt.yticks([], [])
+
+    
+
+# ------------------------------ unit converters ---------------------------------------
+
+def degs2ms(df):
+    df["zonal_velocity"] = df["zonal_velocity"]* 1000. * 1.852 * 60. * np.cos(df['lat'] * np.pi / 180)
+    df["meridional_velocity"] = df["meridional_velocity"] * 1000. * 1.852 * 60.
+    return df
