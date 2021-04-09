@@ -216,7 +216,7 @@ def print_rechunk(r, v):
 # ------------------------------ temporal filters ---------------------------------------
 
 
-def gen_filter(band, numtaps=24 * 10, dt=1.0, lat=None, domega=None, ndomega=None):
+def generate_filter(band, numtaps=24 * 10, dt=1/24, lat=None, domega=None, ndomega=None):
     """Wrapper around scipy.signal.firwing
     dt: float
         hours
@@ -224,14 +224,16 @@ def gen_filter(band, numtaps=24 * 10, dt=1.0, lat=None, domega=None, ndomega=Non
     params = {}
     pass_zero = False
     if band == "semidiurnal":
-        omega = 1 / 12.0
+        omega = 2
     elif band == "diurnal":
-        omega = 1 / 24.0
+        omega = 1
     elif band == "inertial":
         try:
             omega = coriolis(lat) * 3600 / 2.0 / np.pi
         except:
             print("latitude needs to be provided to gen_filter")
+    elif isinstance(band, float):
+        omega = band
     #
     if domega is not None:
         cutoff = [omega - domega, omega + domega]
@@ -244,15 +246,15 @@ def gen_filter(band, numtaps=24 * 10, dt=1.0, lat=None, domega=None, ndomega=Non
         pass_zero = True
         cutoff = [1.0 / 30.0]
     h = signal.firwin(
-        numtaps, cutoff=cutoff, pass_zero=pass_zero, nyq=1.0 / 2 / dt, scale=True
+        numtaps, cutoff=cutoff, pass_zero=pass_zero, fs=1/dt, scale=True
     )
     return h
 
 
-def filter_response(h, dt=1.0):
+def filter_response(h, dt=1/24):
     """Returns the frequency response"""
-    w, hh = signal.freqz(h, worN=8000)
-    return hh, (w / np.pi) / 2 / dt * 24
+    w, hh = signal.freqz(h, worN=8000, fs=1/dt)
+    return hh, w
 
 
 # ------------------------------ spectrum ---------------------------------------
