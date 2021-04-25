@@ -56,6 +56,7 @@ if os.path.isdir("/home/datawork-lops-osi/"):
     #
     root_data_dir = "/home/datawork-lops-osi/equinox/mit4320/"
     ref_data_dir = "/dataref/ocean-analysis/intranet/LLC4320_surface/"
+    work_data_dir = root_data_dir    
     #
     bin_data_dir = root_data_dir + "bin/"
     bin_grid_dir = bin_data_dir + "grid/"
@@ -588,7 +589,7 @@ def load_bathy(subsample=None):
     return ds['h']
 
 
-def load_oceans(features=["oceans"]):
+def load_oceans(database="IHO", features=["oceans"]):
     """ Load Oceans, Seas and other features shapes
     
     Usage
@@ -598,23 +599,42 @@ def load_oceans(features=["oceans"]):
     
     Parameters
     ----------
-        features: tuple, optional
-            Features to output: ("oceans", "seas", "other")
+    database: str, optional,
+        Database to load, available: "IHO" (default), "ne_110m_ocean"
+    features: tuple, optional
+        Features to output: ("oceans", "seas", "other")
+        
+    Notes
+    -----
+    IHO ocean seas shapefiles from https://marineregions.org/downloads.php
+    Ocean seas shapefiles from: http://www.naturalearthdata.com/downloads/
+    
     """
     if platform=="datarmor":
-        path = os.path.join(osi, "equinox/misc/World_Seas_IHO_v3/World_Seas_IHO_v3.shp")
-    gdf = gpd.read_file(path)
-    gdf = gdf.rename(columns={c: c.lower() for c in gdf.columns})
-    out = {}
-    if "oceans" in features:
-        out["oceans"] = gdf.loc[gdf.name.str.contains('Ocean')]
-    if "seas" in features:
-        out["seas"] = gdf.loc[gdf.name.str.contains('Sea')]
-    if "other" in features:
-        out["other"] = gdf.loc[~gdf.name.str.contains('Ocean|Sea')]
-    if len(out)==1:
-        return list(out.values())[0]
-    else:
+        root_shape_dir = os.path.join(osi, "equinox/misc/")
+    if database=="IHO":
+        path = os.path.join(root_shape_dir,
+                            "World_Seas_IHO_v3/World_Seas_IHO_v3.shp"
+                           )
+        gdf = gpd.read_file(path)
+        gdf = gdf.rename(columns={c: c.lower() for c in gdf.columns})
+        out = {}
+        if "oceans" in features:
+            out["oceans"] = gdf.loc[gdf.name.str.contains('Ocean')]
+        if "seas" in features:
+            out["seas"] = gdf.loc[gdf.name.str.contains('Sea')]
+        if "other" in features:
+            out["other"] = gdf.loc[~gdf.name.str.contains('Ocean|Sea')]
+        if len(out)==1:
+            return list(out.values())[0]
+        else:
+            return out
+    elif database=="ne_110m_ocean":
+        path = os.path.join(root_shape_dir, 
+                            "ne_110m_ocean/ne_110m_ocean.shp",
+                           )
+        out = gpd.read_file(path)
         return out
+        
 
 

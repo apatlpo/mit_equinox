@@ -276,6 +276,7 @@ def plot_pretty(
                     y="YC",
                     cmap=colmap,
                     add_colorbar=False,
+                    **kwargs,
                 )
                 im = vplt.where(
                     (vplt.XC < 0) & (vplt.XC > -180.0 + eps)
@@ -288,6 +289,7 @@ def plot_pretty(
                     y="YC",
                     cmap=colmap,
                     add_colorbar=False,
+                    **kwargs,
                 )
             else:
                 im = vplt.plot.pcolormesh(
@@ -299,6 +301,7 @@ def plot_pretty(
                     y="YC",
                     cmap=colmap,
                     add_colorbar=False,
+                    **kwargs,
                 )
         if extent == "global":
             ax.set_extent("global")
@@ -306,7 +309,7 @@ def plot_pretty(
             cbar = fig.colorbar(im, **colorbar_kwargs)
         else:
             cbar = None
-        if gridlines and _extent is not None:
+        if gridlines and _extent is not None and _projection!=ccrs.EckertIII():
             # grid lines:
             xticks = np.arange(
                 _extent[0],
