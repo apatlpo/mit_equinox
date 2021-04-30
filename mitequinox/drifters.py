@@ -3,14 +3,20 @@ import pickle
 
 import numpy as np
 import pandas as pd
-import geopandas
 import dask.bag as db
 import xarray as xr
+
+import geopandas as gpd
+from shapely.geometry import Polygon, Point
+from shapely import wkt
+import pyproj
+crs_wgs84 = pyproj.CRS("EPSG:4326")
+import pyinterp.geohash as geohash
 
 from functools import partial
 
 # from .utils import fix_lon_bounds, work_data_dir
-from .utils import fix_lon_bounds
+from .utils import fix_lon_bounds, load_oceans
 
 
 # --------------------------------------  pair I/O ------------------------------------------------
@@ -91,6 +97,90 @@ def load_single_df_fromnc(npartitions=100, gps=None):
     ds["LON"] = fix_lon_bounds(ds["LON"])
 
     return ds.to_dask_dataframe()
+
+# ---------------------------  lon/lat grid - geohash --------------------------
+
+def generate_grid_and_geohashes(dl,
+                                lat_bounds=(-80,80),
+                                geohash=False,
+                                plot=False,
+                                buffered=False,
+                                ):
+    """ Generate a regular lon/lat grid
+    """
+
+    # generate grid
+    lon = np.arange(-180, 180, dl)
+    lat = np.arange(lat_bounds[0], lat_bounds[1], dl)
+    lon2, lat2 = np.meshgrid(lon, lat)
+
+    # associated shapely objects and geopandas dataframe
+    def get_poly(lon, lat, dlon, dlat):
+        return ((lon, lat),
+                (lon+dlon, lat),
+                (lon+dlon, lat+dlat),
+                (lon, lat+dlat), (lon, lat),
+                )
+    _polygons = [Polygon(get_poly(_lon,_lat, dl, dl))
+                 for _lon, _lat in zip(lon2.flatten(), lat2.flatten())]
+    #
+    gdf = gpd.GeoDataFrame(
+        None, geometry=_polygons, crs=crs_wgs84
+    )
+
+    # filter oceans out
+    ocean = load_oceans(database="ne_110m_ocean")
+
+    # select only boxes that are within ocean
+    gdf = gpd.sjoin(gdf, ocean, how='inner', op='intersects')
+    gdf = gdf.drop(columns=["index_right",
+                            "scalerank",
+                            "featurecla",
+                            "min_zoom",
+                           ])
+    if plot:
+        gdf.plot()
+
+    if geohash:
+        if isinstance(geohash, int):
+            geohash_resolution=geohash
+        else:
+            # default resolution
+            geohash_resolution=2
+        hash_boxes = get_geohashes(geohash_resolution)
+        gdf = (gpd
+               .sjoin(gdf, hash_boxes, how='left', op='intersects')
+               .rename(columns=dict(index_right="geohash"))
+               )
+
+    if not buffered:
+        return gdf
+
+    # buffer each polygons
+    gdf_buff = gdf.copy()
+    gdf_buff['geometry'] = gdf.buffer(dl)
+
+    if geohash:
+        gdf_buff = (gpd
+                      .sjoin(gdf_buff, hash_boxes, how='left', op='intersects')
+                      .rename(columns=dict(index_right="geohash"))
+                     )
+
+    return gdf, gdf_buff
+
+
+def get_geohashes(resolution):
+
+    # generate all geohases for one resolution
+    codes = geohash.bounding_boxes(None, precision=2)
+
+    hash_boxes = gpd.GeoDataFrame(
+        {'geohash': codes},
+        geometry=[wkt.loads(geohash.bounding_box(code).wkt()) for code in codes],
+        crs=crs_wgs84,
+    ).set_index("geohash")
+
+    return hash_boxes
 
 
 # --------------------------------------  binning ------------------------------------------------
@@ -221,7 +311,7 @@ def time_window_processing(
             Label used to identify drifters
         dt: float, str
             Conform time series to some time step, if string must conform to rule option of
-            pandas resample method 
+            pandas resample method
         **myfun_kwargs
             Keyword arguments for myfun
 
@@ -242,7 +332,7 @@ def time_window_processing(
     #
     # drop duplicated values
     df = df.drop_duplicates(subset="date")
-    #p = p.where(p.time.diff() != 0).dropna() # duplicates - old   
+    #p = p.where(p.time.diff() != 0).dropna() # duplicates - old
     #
     df = df.sort_values("time")
     #
@@ -469,13 +559,13 @@ def compute_lonlat(
 def to_gdataframe(*args):
     if len(args) == 1:
         df = args[0]
-        return geopandas.GeoDataFrame(
-            df, geometry=geopandas.points_from_xy(df.LON, df.LAT)
+        return gpd.GeoDataFrame(
+            df, geometry=gpd.points_from_xy(df.LON, df.LAT)
         )
     else:
         return [
-            geopandas.GeoDataFrame(
-                df, geometry=geopandas.points_from_xy(df.LON, df.LAT)
+            gpd.GeoDataFrame(
+                df, geometry=gpd.points_from_xy(df.LON, df.LAT)
             )
             for df in args
         ]

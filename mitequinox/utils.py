@@ -56,6 +56,7 @@ if os.path.isdir("/home/datawork-lops-osi/"):
     #
     root_data_dir = "/home/datawork-lops-osi/equinox/mit4320/"
     ref_data_dir = "/dataref/ocean-analysis/intranet/LLC4320_surface/"
+    work_data_dir = root_data_dir
     #
     bin_data_dir = root_data_dir + "bin/"
     bin_grid_dir = bin_data_dir + "grid/"
@@ -78,6 +79,10 @@ elif os.path.isdir("/work/ALT/swot/"):
     diag_dir = os.path.join(work_data_dir, "diags/")
     #
     enatl60_data_dir = "/work/ALT/odatis/eNATL60/"
+elif os.path.isdir("/Users/aponte"):
+    # laptop
+    platform = "laptop"
+
 
 # ------------------------------ mit specific ---------------------------------------
 
@@ -277,9 +282,9 @@ def is_diagnostic(name,
         directory = diag_dir
     zarr_dir = os.path.join(directory, name+'.zarr')
     return os.path.isdir(zarr_dir)
-        
+
 def load_diagnostic(name,
-                    directory=None, 
+                    directory=None,
                     **kwargs):
     """ Load diagnostics from disk
     Parameters
@@ -313,7 +318,7 @@ def _check_diagnostic_directory(directory,
                                 create=True,
                                ):
     """ Check existence of a directory and create it if necessary
-    
+
     Parameters
     ----------
     directory: str
@@ -347,9 +352,9 @@ def _move_singletons_as_attrs(ds, ignore=[]):
     return ds
 
 def _reset_chunk_encoding(ds):
-    ''' Delete chunks from variables encoding. 
+    ''' Delete chunks from variables encoding.
     This may be required when loading zarr data and rewriting it with different chunks
-    
+
     Parameters
     ----------
     ds: xr.DataArray, xr.Dataset
@@ -365,7 +370,7 @@ def _reset_chunk_encoding(ds):
         if 'chunks' in ds[v].encoding:
             del ds[v].encoding['chunks']
     return ds
-        
+
 def _check_chunks_sizes(da):
     """ checks that chunk sizes are above the _chunk_size_threshold
     """
@@ -394,7 +399,7 @@ def _auto_rechunk_da(da):
     exceeds _chunk_size_threshold
     """
     dims = ['i', 'i_g', 'j', 'j_g', 'face',
-            'k', 'lon', 'lat', 
+            'k', 'lon', 'lat',
             'time']
     for d in dims:
         # gather da number of elements and chunk sizes
@@ -423,8 +428,8 @@ def _auto_rechunk(ds):
         ds = ds.assign(**{k: _auto_rechunk_da(da)})
     for k, da in ds.coords.items():
         ds = ds.assign_coords(**{k: _auto_rechunk_da(da)})
-    return ds    
-    
+    return ds
+
 # ------------------------------ misc ---------------------------------------
 
 
@@ -453,7 +458,7 @@ def removekey(d, key):
 
 def custom_distribute(ds, op, tmp_dir=None, suffix=None, root=True, **kwargs):
     """ Distribute an embarrasingly parallel calculation manually and store chunks to disk
-    
+
     Parameters
     ----------
     ds: xr.Dataset
@@ -473,7 +478,7 @@ def custom_distribute(ds, op, tmp_dir=None, suffix=None, root=True, **kwargs):
 
     if suffix is None:
         suffix="tmp"
-        
+
     d = list(kwargs.keys())[0]
     c = kwargs[d]
 
@@ -501,12 +506,12 @@ def custom_distribute(ds, op, tmp_dir=None, suffix=None, root=True, **kwargs):
             out.to_zarr(zarr, mode="w")
             D.append(xr.open_zarr(zarr))
             #print("End reached: {}".format(_suffix))
-            
+
     # merge results back and return
     ds = xr.concat(D, d) #positions=chunks
-    
+
     return ds, Z
-    
+
 # ------------------------------ enatl60 specific ---------------------------------------
 
 
@@ -561,12 +566,12 @@ def dateRange(date1, date2, dt=timedelta(days=1.0)):
     for n in np.arange(date1, date2, dt):
         yield np64toDate(n)
 
-        
+
 # ------------------------------ misc data ---------------------------------------
-        
+
 def load_bathy(subsample=None):
     """ Load bathymetry (etopo1)
-    
+
     Parameters
     ----------
         subsample: int, optional
@@ -586,33 +591,51 @@ def load_bathy(subsample=None):
     return ds['h']
 
 
-def load_oceans(features=["oceans"]):
+def load_oceans(database="IHO", features=["oceans"]):
     """ Load Oceans, Seas and other features shapes
-    
+
     Usage
     -----
     oceans = load_oceans()
     oceans.loc[oceans.name == 'North Atlantic Ocean'].plot()
-    
+
     Parameters
     ----------
-        features: tuple, optional
-            Features to output: ("oceans", "seas", "other")
+    database: str, optional,
+        Database to load, available: "IHO" (default), "ne_110m_ocean"
+    features: tuple, optional
+        Features to output: ("oceans", "seas", "other")
+
+    Notes
+    -----
+    IHO ocean seas shapefiles from https://marineregions.org/downloads.php
+    Ocean seas shapefiles from: http://www.naturalearthdata.com/downloads/
+
     """
     if platform=="datarmor":
-        path = os.path.join(osi, "equinox/misc/World_Seas_IHO_v3/World_Seas_IHO_v3.shp")
-    gdf = gpd.read_file(path)
-    gdf = gdf.rename(columns={c: c.lower() for c in gdf.columns})
-    out = {}
-    if "oceans" in features:
-        out["oceans"] = gdf.loc[gdf.name.str.contains('Ocean')]
-    if "seas" in features:
-        out["seas"] = gdf.loc[gdf.name.str.contains('Sea')]
-    if "other" in features:
-        out["other"] = gdf.loc[~gdf.name.str.contains('Ocean|Sea')]
-    if len(out)==1:
-        return list(out.values())[0]
-    else:
+        root_shape_dir = os.path.join(osi, "equinox/misc/")
+    elif platform=="laptop":
+        root_shape_dir = "/Users/aponte/Data/shapefiles/"
+    if database=="IHO":
+        path = os.path.join(root_shape_dir,
+                            "World_Seas_IHO_v3/World_Seas_IHO_v3.shp"
+                           )
+        gdf = gpd.read_file(path)
+        gdf = gdf.rename(columns={c: c.lower() for c in gdf.columns})
+        out = {}
+        if "oceans" in features:
+            out["oceans"] = gdf.loc[gdf.name.str.contains('Ocean')]
+        if "seas" in features:
+            out["seas"] = gdf.loc[gdf.name.str.contains('Sea')]
+        if "other" in features:
+            out["other"] = gdf.loc[~gdf.name.str.contains('Ocean|Sea')]
+        if len(out)==1:
+            return list(out.values())[0]
+        else:
+            return out
+    elif database=="ne_110m_ocean":
+        path = os.path.join(root_shape_dir,
+                            "ne_110m_ocean/ne_110m_ocean.shp",
+                           )
+        out = gpd.read_file(path)
         return out
-
-

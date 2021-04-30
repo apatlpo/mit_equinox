@@ -226,13 +226,13 @@ class tiler(object):
         """Load tiler from tile_dir"""
 
         # load various dict
-        with open(os.path.join(tile_dir, "various.p"), "rb") as f:
-            various = pickle.load(f)
-        self.global_domain_size = various["global_domain_size"]
-        self.N_tiles = various["N_tiles"]
-
+        ds = xr.open_dataset(os.path.join(tile_dir, "info.nc")) 
+        self.global_domain_size = (ds.attrs["global_domain_size_0"], 
+                                   ds.attrs["global_domain_size_1"])
+        self.N_tiles = ds.attrs["N_tiles"]
+        
         # regenerate projections
-        self.CRS = list(map(pyproj.CRS, various["crs_strings"]))
+        self.CRS = list(map(pyproj.CRS, list(ds["crs_strings"].values)))
 
         # rebuild slices (tiles, boundaries)
         D = {}
@@ -240,12 +240,12 @@ class tiler(object):
             D[t] = [
                 (
                     slice(
-                        various["slices"]["i_start_" + t].loc[i],
-                        various["slices"]["i_end_" + t].loc[i],
+                        int(ds["i_start_" + t].isel(tile=i)),
+                        int(ds["i_end_" + t].isel(tile=i)),
                     ),
                     slice(
-                        various["slices"]["j_start_" + t].loc[i],
-                        various["slices"]["j_end_" + t].loc[i],
+                        int(ds["j_start_" + t].isel(tile=i)),
+                        int(ds["j_end_" + t].isel(tile=i)),
                     ),
                 )
                 for i in range(self.N_tiles)
@@ -277,23 +277,21 @@ class tiler(object):
         df_tiles = slices_to_dataframe(self.tiles)
         df_boundaries = slices_to_dataframe(self.boundaries)
         df = pd.concat(
-            [df_tiles.add_suffix("_tiles"), df_boundaries.add_suffix("_boundaries")],
+            [df_tiles.add_suffix("_tiles"),
+             df_boundaries.add_suffix("_boundaries")],
             axis=1,
         )
-        # add crs strings
-        # df = df.assign(crs=self.crs_strings)
-        # header
-        # header = ['{}={}'.format(v) for v in [self.]]
-        # df.to_csv(os.path.join(tile_dir, 'slices_crs_scalars.csv'))
-        various = {
-            "slices": df,
-            "crs_strings": self.crs_strings,
-            "global_domain_size": self.global_domain_size,
-            "N_tiles": self.N_tiles,
-        }
-        with open(os.path.join(tile_dir, "various.p"), "wb") as f:
-            pickle.dump(various, f)
-
+        ds = (df
+              .to_xarray()
+              .rename(dict(index="tile"))
+             )
+        ds["crs_strings"]=("tile", self.crs_strings) # was list
+        ds.attrs["global_domain_size_0"] = self.global_domain_size[0]
+        ds.attrs["global_domain_size_1"] = self.global_domain_size[1]
+        ds.attrs["N_tiles"] = self.N_tiles
+        # store in netcdf file
+        ds.to_netcdf(os.path.join(tile_dir, "info.nc"), mode="w")
+        #
         # boundary data
         for key in ["tiles", "boundaries"]:
             df = pd.concat(
