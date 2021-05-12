@@ -148,6 +148,8 @@ def generate_grid_and_geohashes(dl,
             # default resolution
             geohash_resolution=2
         hash_boxes = get_geohashes(geohash_resolution)
+        if buffered:
+            gdf_buff = gdf.copy()
         gdf = (gpd
                .sjoin(gdf, hash_boxes, how='left', op='intersects')
                .rename(columns=dict(index_right="geohash"))
@@ -157,13 +159,12 @@ def generate_grid_and_geohashes(dl,
         return gdf
 
     # buffer each polygons
-    gdf_buff = gdf.copy()
-    gdf_buff['geometry'] = gdf.buffer(dl)
+    gdf_buff['geometry'] = gdf_buff.buffer(dl)
 
     if geohash:
         gdf_buff = (gpd
-                      .sjoin(gdf_buff, hash_boxes, how='left', op='intersects')
-                      .rename(columns=dict(index_right="geohash"))
+                    .sjoin(gdf_buff, hash_boxes, how='left', op='intersects')
+                    .rename(columns=dict(index_right="geohash"))
                      )
 
     return gdf, gdf_buff

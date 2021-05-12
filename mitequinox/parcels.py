@@ -1266,9 +1266,9 @@ class parcels_output(object):
         tile_dir = os.path.join(run_dir, 'tiling/')
         if os.path.isdir(tile_dir):
             self.tiler = tiler(tile_dir=tile_dir)
-        parquet_dir = os.path.join(run_dir, 'parquets/')
-        if os.path.isdir(parquet_dir):
-            parquet_paths = glob(parquet_dir+'*')
+        self.parquet_dir = os.path.join(run_dir, 'parquets/')
+        if os.path.isdir(self.parquet_dir):
+            parquet_paths = glob(self.parquet_dir+'*')
             self.parquets = {p.split('/')[-1]: p for p in parquet_paths}
         else:
             print('Not parquet files found, may need to produce them, see parcel_distributed.ipynb')
