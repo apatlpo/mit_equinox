@@ -1485,6 +1485,30 @@ def plot_h3_simple(
 # ------------------------------ unit converters ---------------------------------------
 
 def degs2ms(df):
+    """
+    Convert velocity in degree per second in meter per second
+    Parameters:
+    ----------
+    df : dask dataframe in which the velcoity are in degree per second
+    """     
     df["zonal_velocity"] = df["zonal_velocity"]* 1000. * 1.852 * 60. * np.cos(df['lat'] * np.pi / 180)
     df["meridional_velocity"] = df["meridional_velocity"] * 1000. * 1.852 * 60.
+    return df
+
+# ------------------------------ geographical coordinates ---------------------------------------
+
+def add_geodata(df):
+
+    df['lon'] = df.apply(lambda r: r.name[0].mid, axis=1)
+    df['lat'] = df.apply(lambda r: r.name[1].mid, axis=1)
+
+    def build_polygon(r):
+        lon0, lon1 = r.name[0].left, r.name[0].right
+        lat0, lat1 = r.name[1].left, r.name[1].right
+        return Polygon([[lon0, lat0],[lon1, lat0], [lon1, lat1], [lon0, lat1]])
+
+    df['Coordinates'] = df.apply(build_polygon, axis=1)
+    df = geopandas.GeoDataFrame(df, geometry='Coordinates', crs='EPSG:4326')
+    df['area'] = df.to_crs(crs = 'epsg:3857').area /1e6 / 1e4 # 100km^2 units
+    
     return df
