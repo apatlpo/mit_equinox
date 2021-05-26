@@ -1484,14 +1484,18 @@ def plot_h3_simple(
 
 # ------------------------------ unit converters ---------------------------------------
 
-def degs2ms(df):
+def degs2ms(df,lat='lat'):
     """
-    Convert velocity in degree per second in meter per second
+    Convert velocity in degree per second in meter per second.
+    See parcels code :
+    https://github.com/OceanParcels/parcels/blob/6c83aa0acfe74f89bb8ce7a01de6357329d488d4/parcels/tools/converters.py
+    
     Parameters:
     ----------
     df : dask dataframe in which the velcoity are in degree per second
+    lat : name of the column corresponding to latitude, defaults is 'lat'
     """     
-    df["zonal_velocity"] = df["zonal_velocity"]* 1000. * 1.852 * 60. * np.cos(df['lat'] * np.pi / 180)
+    df["zonal_velocity"] = df["zonal_velocity"]* 1000. * 1.852 * 60. * np.cos(df[lat] * np.pi / 180)
     df["meridional_velocity"] = df["meridional_velocity"] * 1000. * 1.852 * 60.
     return df
 
