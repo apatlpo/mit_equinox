@@ -276,7 +276,7 @@ def _get_E(x, ufunc=True, **kwargs):
     dkwargs = {
         "window": "hann",
         "return_onesided": False,
-        "detrend": None,
+        "detrend": False,
         "scaling": "density",
     }
     dkwargs.update(kwargs)
