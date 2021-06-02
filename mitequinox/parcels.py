@@ -16,6 +16,8 @@ from shapely.geometry import Polygon, Point
 import pyproj
 from datetime import timedelta, datetime
 
+from matplotlib import pyplot as plt
+
 from h3 import h3
 
 import dask
@@ -1419,8 +1421,225 @@ def _reset_chunk_encoding(ds):
             del ds[v].encoding['chunks']
     return ds
 
-# ------------------------------ h3 relative ---------------------------------------
+# ------------------------------ plotting------------------------------------------
 
+def plot_llc_parcels(t_start, 
+                     t_end,
+                     t_delta='1H',
+                     parquet_dir=None,
+                     trail=None,
+                     flag_drifters=0,
+                     drifter_kwargs=None,
+                     background=None,
+                     fig_suffix=None, 
+                     fig_dir=None,
+                     overwrite=True,
+                     offline=True,
+                     **kwargs
+                    ):
+    """ generates plots with drifter tracks and background llc data
+    
+    Parameters
+    ----------
+    t_start: str, pd.Timestamp
+        Figures start time
+    t_start: str, pd.Timestamp
+        Figures end time
+    t_delta: str, optional
+        Time interval between figures, default is '1H'
+    trail: pd.Timedelta, str, optional
+        Length of drifter tracks trail
+    drifter_kwargs: dict, optional
+        plot options for drifters
+    flag_drifters: int, optional
+        Flag drifters that depending on deployment date
+        Show all drifters by default
+    background: dict, optional
+        Dict containing all background related options
+        Passed to plot_pretty
+    fig_dir: str, optional
+        Path where figures will be stored
+    fig_suffix: str, optional
+        Added to figure name
+    overwrite: boolean, optional
+        Controls whether files are overwritten or not, default is True
+    offline: boolean, optional
+        if True figures production is distributed
+        if False figures are produced locally (debug)
+    """
+    import cartopy.crs as ccrs
+    
+    if offline:
+        import dask
+        dask.config.set(scheduler='threads')  # overwrite default with threaded scheduler
+    
+    if trail is None:
+        trail = pd.Timedelta(0)
+    elif isinstance(trail, str):
+        trail = pd.Timedelta(trail)
+        
+    bg_kwargs = {'v': 'SST',
+                 'dij': 8,
+                 'vmin': -2.5,
+                 'vmax': 32.5,
+                 'gridlines': False,
+                 'figsize': (15,6),
+                 'region': 'global',
+                }
+    if isinstance(background, dict):
+        bg_kwargs.update(background)
+    bg_v = bg_kwargs['v']
+    if 'zarr' in bg_kwargs:
+        bg_zarr = bg_kwargs['zarr']
+    else:
+        bg_zarr = None
+    
+    if fig_dir is None:
+        fig_dir = os.environ['SCRATCH']+'/figs/'
+    if fig_suffix is None:
+        fig_suffix = ''
+    
+    t_range = pd.date_range(t_start, t_end, freq=t_delta)
+
+    # llc
+    if background:
+        if bg_zarr is None:
+            from .utils import load_llc
+            if bg_v in ['SSU', 'SSV']:
+                llc = load_llc(['SSU', 'SSV'], bg_kwargs['dij'], t_start, t_end)
+            else:
+                llc = load_llc(bg_v, bg_kwargs['dij'], t_start, t_end)
+        else:
+            llc = xr.open_zarr(bg_zarr)
+
+    if bg_v in ['SSU', 'SSV']:
+        from .utils import rotate
+        u, v = rotate(llc.SSU, llc.SSV, llc)
+    if bg_v=='SSU':
+        llc = u.rename('SSU').to_dataset()
+    elif bg_v=='SSV':
+        llc = v.rename('SSV').to_dataset()
+    
+    # drifters
+    if parquet_dir is None:
+        parquet_dir = p.parquets['time']
+        #parquet_dir = '/home1/datawork/aponte/parcels/global_extra_T365j_dt1j_dij50/parquets/time'
+    df = dd.read_parquet(parquet_dir)
+    df = df.loc[(df.index>=t_start-trail)&(df.index<=t_end)].compute()
+
+    _drifter_kwargs = dict(transform=ccrs.PlateCarree())
+    _drifter_kwargs.update(drifter_kwargs)
+    
+    #
+    from .plot import plot_pretty
+    import threading
+    MPL_LOCK = threading.Lock()
+    with MPL_LOCK:
+        if offline:
+            plt.switch_backend('agg')
+    
+        for t in t_range:
+            
+            date = t.strftime('%Y-%m-%d_%HH')
+            figname = fig_dir+fig_suffix+date+'.png'
+            
+            if overwrite or not os.path.isfile(figname) or not offline:
+
+                if background:
+                    bg_kwargs['v'] = llc[bg_v].sel(time=t) #.compute()
+                    d = plot_pretty(**bg_kwargs)
+                    fig, ax = d['fig'], d['ax']
+                    if not offline:
+                        print('background printed')
+                else:
+                    fig = plt.figure(figsize=(15,6))
+                    ax = fig.add_subplot(111, projection=ccrs.PlateCarree())
+                
+                if trail:
+                    # show trailing positions
+                    _df = df.loc[(df.index>t-trail)&(df.index<=t)]
+                    (_df
+                     .groupby('trajectory')
+                     .apply(plot_trajectory, ax=ax, **_drifter_kwargs)
+                    )
+                else:
+                    # do not show trailing positions
+                    # much much faster
+                    _df = df.loc[str(t)]
+                    _drifter_kwargs["marker"] = "."
+                    ax.plot(_df.lon, _df.lat, **_drifter_kwargs)
+
+                ax.set_title(date)
+
+                if offline:
+                    fig.savefig(figname, dpi=150, bbox_inches = 'tight')
+                    plt.close(fig)
+                      
+def plot_trajectory(df, 
+                    ax=None, 
+                    flag_drifters=0,
+                    **kwargs,
+                   ):
+    """ plot single drifter trajectory
+    
+    Parameters
+    ----------
+    df: pandas.Dataframe
+    ax: pyplot axis, optional
+    flag_drifters: int, optional
+        used to distinguish drifters 
+    **kwargs: optional
+        options for plot method
+    """
+    df = df.sort_index()
+    dr_id = int(df['trajectory'].unique()[0])
+    if flag_drifters==1:
+        # skips drifter not initially deployed, this should be done outside plot_trajectory
+        if dr_id in id_t0:
+            color='k'
+        else:
+            return
+    elif flag_drifters==2:
+        # disinguish with colors both types of drifters
+        if dr_id in id_t0:
+            color='k'
+        else:
+            color='0.8'
+    else:
+        color='k'
+    dkwargs = dict(ms=1, color=color)
+    dkwargs.update(kwargs)
+    if ax is None:
+        ax = plt
+    ax.plot(df.lon, df.lat, **dkwargs)
+
+def filter_drifters_regionally(df, extent, t_range=None, parquet_dir=None, overwrite=True):
+    """ Filter data within a box of longitudes and latitudes and store data
+    """
+    # get id of drifter that goes through the region
+    df = df[ (df.lon>extent[0])
+            &(df.lon<extent[1])
+            &(df.lat>extent[2])
+            &(df.lat<extent[3])
+           ]
+    dr_id = list(df['trajectory'].drop_duplicates().compute())
+    df = df[ df.trajectory.isin(dr_id) ]
+    
+    # could also filter on time
+    if t_range is not None:
+        if isinstance(t_range, pd.Index):
+            t_range = tuple(t_range[[0,-1]])
+        df = df.loc[ (df.index>=t_range[0]-pd.Timedelta('5D')) & (df.index<=t_range[1])]
+    
+    # store
+    if parquet_dir is None:
+        from .utils import scratch
+        parquet_dir = scratch
+    parquet_path = store_parquet(parquet_dir, df, name='zoom_drifters', overwrite=overwrite)
+    
+    return parquet_path
+        
+# ------------------------------ h3 relative ---------------------------------------
 
 def h3_index(df, resolution=2):
     """

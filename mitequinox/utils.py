@@ -3,8 +3,9 @@ from glob import glob
 import numpy as np
 import xarray as xr
 import pandas as pd
-from pandas import DataFrame, Series
+
 import geopandas as gpd
+from shapely.geometry import Polygon    
 
 import dateutil
 from datetime import timedelta, datetime
@@ -38,7 +39,7 @@ def fix_lon_bounds(lon):
     """ reset longitudes bounds to (-180,180)"""
     if isinstance(lon, xr.DataArray):  # xarray
         return lon.where(lon < 180.0, other=lon - 360)
-    elif isinstance(lon, Series):  # pandas series
+    elif isinstance(lon, pd.Series):  # pandas series
         out = lon.copy()
         out[out > 180.0] = out[out > 180.0] - 360.0
         return out
@@ -179,6 +180,31 @@ def load_data_nc(v, suff="_t*", files=None, **kwargs):
     )
     return ds
 
+def load_llc(v, dij, t_start, t_end):
+    """ load llc data and subsample
+    """
+    if isinstance(v, list):
+        return xr.merge([load_llc(_v, dij, t_start, t_end) for _v in v])
+    ds = (load_data(V=[v])
+          .sel(time=slice(str(t_start), str(t_end)))
+         )
+    
+    i, j = get_ij_dims(ds[v])
+    ds = ds.rename({i: 'i', j: 'j'})
+    ds = ds.isel(i=slice(0, None, dij),
+                 j=slice(0, None, dij),
+                )
+    coords = ['XC', 'YC']
+    if v in ['SSU', 'SSV']:
+        coords = coords + ['CS', 'SN']
+    grd = (load_grd()[coords]
+           .isel(i=slice(0, None, dij), 
+                 j=slice(0, None, dij), 
+                )
+          )
+    #       .load_grd()[['XC', 'YC', 'XG', 'YG']]
+    llc = xr.merge([ds, grd])
+    return llc
 
 def load_iters_date_files(v="Eta"):
     """For a given variable returns a dataframe of available data"""
@@ -186,7 +212,7 @@ def load_iters_date_files(v="Eta"):
     iters = [int(f.split("_t")[-1].split(".")[0]) for f in files]
     date = iters_to_date(iters)
     d = [{"date": d, "iter": i, "file": f} for d, i, f in zip(date, iters, files)]
-    return DataFrame(d).set_index("date")
+    return pd.DataFrame(d).set_index("date")
 
 
 def iters_to_date(iters, delta_t=25.0):
@@ -514,6 +540,50 @@ def custom_distribute(ds, op, tmp_dir=None, suffix=None, root=True, **kwargs):
 
     return ds, Z
 
+def filter_llc_regionally(t_range, 
+                          v=None, 
+                          faces=None, 
+                          dij=None, 
+                          zarr=None, 
+                          overwrite=True, 
+                          background=None,
+                         ):
+    """ Select 
+    """
+    
+    if background is not None:
+        v = background["v"]
+        faces = background["region"]["faces"]
+        dij = background["dij"]
+    else:
+        assert v is not None
+        assert faces is not None
+        assert dij is not None
+        
+    if isinstance(t_range, pd.Index):
+        t_range = tuple(t_range[[0,-1]])
+    
+    if v in ['SSU', 'SSV']:
+        V = ['SSU', 'SSV']
+    else:
+        V = v
+    llc = load_llc(V, dij, t_range[0], t_range[1])
+    llc = llc.sel(face=faces)
+    
+    llc = llc.chunk({'time': 1, 'i': -1, 'j': -1})
+    if 'chunks' in llc.niter.encoding:
+        del llc.niter.encoding['chunks']
+    
+    if zarr is None:
+        zarr = os.path.join(scratch, 'zoom_llc')
+    #
+    if overwrite:
+        mode='w'
+    else:
+        mode='w-'
+    llc.to_zarr(zarr, mode=mode)
+    return zarr  
+
 # ------------------------------ enatl60 specific ---------------------------------------
 
 
@@ -571,7 +641,7 @@ def dateRange(date1, date2, dt=timedelta(days=1.0)):
 
 # ------------------------------ misc data ---------------------------------------
 
-def load_bathy(subsample=None):
+def load_bathy(subsample=None, extent=None, land=False):
     """ Load bathymetry (etopo1)
 
     Parameters
@@ -583,14 +653,22 @@ def load_bathy(subsample=None):
     """
     if platform=="datarmor":
         path = os.path.join(osi, "equinox/misc/bathy/ETOPO1_Ice_g_gmt4.grd")
-    ds = xr.open_dataset(path)
+    ds = xr.open_dataset(path)        
     if subsample is not None:
         ds = ds.isel(x=slice(0, None, subsample),
                      y=slice(0, None, subsample),
                     )
-    ds['z'] = -ds['z']
-    ds = ds.rename({'x':'lon', 'y':'lat', 'z': 'h'})
-    return ds['h']
+    if extent is not None:
+        ds = ds.sel(x=slice(extent[0], extent[1]),
+                    y=slice(extent[2], extent[3]),
+                   )
+    da = -ds['z'].rename("h")
+    if not land:
+        da = da.where(da>=0)
+    da = da.rename({'x':'lon', 'y':'lat',})
+    da.attrs["long_name"] = "depth"
+    # long_name (plot)
+    return da
 
 
 def load_oceans(database="IHO", features=["oceans"]):
@@ -641,3 +719,41 @@ def load_oceans(database="IHO", features=["oceans"]):
                            )
         out = gpd.read_file(path)
         return out
+
+def load_swot_tracks(phase="calval", resolution=None, bbox=None, **kwargs):
+    """ Load SWOT tracks
+    
+    Parameters
+    ----------
+    phase: str, optional
+        "calval" or "science"
+    resolution: str, optional
+        Specify resolution, for example "10s", default is "30s"
+    """
+    
+    tracks_dir = "/home/datawork-lops-osi/equinox/misc/swot"
+    #
+    files = glob(os.path.join(tracks_dir, "*.shp"))
+    files = [f for f in files if phase in f]
+    if resolution is not None:
+        files = [f for f in files if resolution in f]
+    dfiles = {f.split("_")[-1].split(".")[0]: f for f in files}
+    out = {key: gpd.read_file(f, **kwargs) for key, f in dfiles.items()}
+    
+    if bbox is None:
+        return out
+        
+    central_lon = (bbox[0]+bbox[1])*0.5
+    central_lat = (bbox[2]+bbox[3])*0.5
+
+    polygon = Polygon([(bbox[0], bbox[2]), 
+                       (bbox[1], bbox[2]), 
+                       (bbox[1], bbox[3]), 
+                       (bbox[0], bbox[3]), 
+                       (bbox[0], bbox[2]),
+                      ])
+    out = {key: gpd.clip(gdf, polygon) for key, gdf in out.items()}
+
+    return out
+    
+    
