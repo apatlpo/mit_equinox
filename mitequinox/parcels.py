@@ -1506,13 +1506,13 @@ def add_geodata(df):
     df['lon'] = df.apply(lambda r: r.name[0].mid, axis=1)
     df['lat'] = df.apply(lambda r: r.name[1].mid, axis=1)
 
-    def build_polygon(r):
-        lon0, lon1 = r.name[0].left, r.name[0].right
-        lat0, lat1 = r.name[1].left, r.name[1].right
-        return Polygon([[lon0, lat0],[lon1, lat0], [lon1, lat1], [lon0, lat1]])
+#    def build_polygon(r):
+#        lon0, lon1 = r.name[0].left, r.name[0].right
+#       lat0, lat1 = r.name[1].left, r.name[1].right
+#        return Polygon([[lon0, lat0],[lon1, lat0], [lon1, lat1], [lon0, lat1]])
 
-    df['Coordinates'] = df.apply(build_polygon, axis=1)
-    df = geopandas.GeoDataFrame(df, geometry='Coordinates', crs='EPSG:4326')
-    df['area'] = df.to_crs(crs = 'epsg:3857').area /1e6 / 1e4 # 100km^2 units
+#    df['Coordinates'] = df.apply(build_polygon, axis=1)
+#    df = geopandas.GeoDataFrame(df, geometry='Coordinates', crs='EPSG:4326')
+#    df['area'] = df.to_crs(crs = 'epsg:3857').area /1e6 / 1e4 # 100km^2 units
     
     return df
