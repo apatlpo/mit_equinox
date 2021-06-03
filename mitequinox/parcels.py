@@ -1160,7 +1160,7 @@ def store_parquet(
     index=None,
     overwrite=False,
     engine="auto",
-    compression="ZSTD",
+    compression=None,
     name=None,
 ):
     """store data under parquet format
@@ -1245,7 +1245,7 @@ def load_parquet(
 
     # test if parquet
     if os.path.isdir(parquet_path):
-        return dd.read_parquet(parquet_path, engine="fastparquet")
+        return dd.read_parquet(parquet_path, engine="pyarrow")
     else:
         print("load_parquet error: directory not found ", parquet_path)
         return None
@@ -1260,6 +1260,7 @@ class parcels_output(object):
                  run_dir, 
                  parquets=None,
                  persist=False,
+                 parquet_kwargs=None,
                 ):
         """ Load parcels distributed run
         """
@@ -1278,12 +1279,15 @@ class parcels_output(object):
         if parquets is not None:
             for p in parquets:
                 assert p in self.parquets, '{} parquet file does not exist'.format(p)
-                _df = dd.read_parquet(self.parquets[p], engine="fastparquet")
+                dkwargs = dict(engine="pyarrow")
+                if parquet_kwargs is not None:
+                    dkwargs.update(parquet_kwargs)
+                _df = dd.read_parquet(self.parquets[p], **dkwargs)
                 if persist:
                     _df = _df.persist()
                 self.df[p] = _df
         #
-        self.diagnostic_dir = os.path.join(self.run_dir,'diagnostics')
+        self.diagnostic_dir = os.path.join(self.run_dir, 'diagnostics')
 
     def __getitem__(self, item):
         return self.df[item]
@@ -1357,10 +1361,10 @@ class parcels_output(object):
         if os.path.isdir(data_path):
             if '.' not in name:
                 # parquet archive
-                data = dd.read_parquet(data_path, engine="auto")
+                data = dd.read_parquet(data_path, **kwargs)
             elif '.zarr' in name:
-                data = xr.open_zarr(data_path)
                 # zarr archive
+                data = xr.open_zarr(data_path, **kwargs)
             if persist:
                 data = data.persist()
             return data  
@@ -1613,7 +1617,12 @@ def plot_trajectory(df,
         ax = plt
     ax.plot(df.lon, df.lat, **dkwargs)
 
-def filter_drifters_regionally(df, extent, t_range=None, parquet_dir=None, overwrite=True):
+def filter_drifters_regionally(df, extent, 
+                               t_range=None, 
+                               region_name=None,
+                               parquet_dir=None, 
+                               overwrite=True,
+                              ):
     """ Filter data within a box of longitudes and latitudes and store data
     """
     # get id of drifter that goes through the region
@@ -1635,7 +1644,10 @@ def filter_drifters_regionally(df, extent, t_range=None, parquet_dir=None, overw
     if parquet_dir is None:
         from .utils import scratch
         parquet_dir = scratch
-    parquet_path = store_parquet(parquet_dir, df, name='zoom_drifters', overwrite=overwrite)
+    name = 'zoom_drifters'
+    if region_name is not None:
+        name = name.replace("_","_"+region_name+"_")
+    parquet_path = store_parquet(parquet_dir, df, name=name, overwrite=overwrite)
     
     return parquet_path
         

@@ -226,7 +226,7 @@ def plot_pretty(
     offline=False,
     figsize=(15, 15),
     savefig=None,
-    swot_tracks=None,
+    swot_tracks=False,
     **kwargs,
 ):
     #
@@ -281,7 +281,7 @@ def plot_pretty(
             _extent = ax.get_extent()
         elif _extent is not None:
             ax.set_extent(_extent)
-        if swot_tracks is not None:
+        if swot_tracks:
             tracks = load_swot_tracks(bbox=_extent)["swath"]
             swot_kwargs = dict(facecolor='grey',
                                edgecolor='white',
@@ -367,7 +367,7 @@ def plot_pretty(
         #                    alpha=0.5, linestyle='--')
         #    gl.xlabels_top = False
         #
-        if swot_tracks is not None:
+        if swot_tracks:
             crs_proj4 = _projection.proj4_init
             ax.add_geometries(tracks.to_crs(crs_proj4)['geometry'],
                               crs=_projection,

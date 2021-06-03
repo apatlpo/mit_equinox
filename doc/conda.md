@@ -26,7 +26,8 @@ pip install rechunker
 conda install -c conda-forge parcels
 pip install h3
 conda install -c conda-forge zstandard  # maybe not necessary with following line:
-conda install -c conda-forge fastparquet
+#conda install -c conda-forge fastparquet
+conda install fastparquet pyarrow -c conda-forge
 conda install pywavelets
 pip install git+git://github.com/psf/black
 #
