@@ -243,7 +243,6 @@ def store_diagnostic(name, data,
                      **kwargs
                     ):
     """ Write diagnostics to disk
-
     Parameters
     ----------
     name: str
@@ -314,7 +313,6 @@ def load_diagnostic(name,
                     directory=None,
                     **kwargs):
     """ Load diagnostics from disk
-
     Parameters
     ----------
     name: str, list

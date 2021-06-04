@@ -112,7 +112,6 @@ class tiler(object):
 
     def _build(self, ds, factor, overlap, N_extra, projection=None):
         """Generate tiling
-
         Parameters
         ----------
         ds: xarray.Dataset
@@ -363,7 +362,6 @@ class tiler(object):
 
     def tile(self, ds, tile=None, rechunk=True, persist=False):
         """Load zarr archive and tile
-
         Parameters
         ----------
         ds: xr.Dataset
@@ -427,7 +425,6 @@ class tiler(object):
 
 def tile_domain(N, factor, overlap, wrap=False):
     """tile a 1D dimension into factor tiles with some overlap
-
     Parameters
     ----------
         N: int
@@ -438,7 +435,6 @@ def tile_domain(N, factor, overlap, wrap=False):
             fraction of overlap
         wrap: boolean, optional
             True means dimension is periodical (default if False)
-
     Returns
     -------
         slices: list
@@ -1164,7 +1160,6 @@ def store_parquet(
     name=None,
 ):
     """store data under parquet format
-
     Parameters
     ----------
         parquet_dir: str
@@ -1235,7 +1230,6 @@ def load_parquet(
     persist=False,
 ):
     """load data into a dask dataframe
-
     Parameters
     ----------
         run_dir: str, path to the simulation (containing the drifters directory)
@@ -1710,3 +1704,40 @@ def plot_h3_simple(
     )
     plt.xticks([], [])
     plt.yticks([], [])
+
+    
+
+# ------------------------------ unit converters ---------------------------------------
+
+def degs2ms(df,lat='lat'):
+    """
+    Convert velocity in degree per second in meter per second.
+    See parcels code :
+    https://github.com/OceanParcels/parcels/blob/6c83aa0acfe74f89bb8ce7a01de6357329d488d4/parcels/tools/converters.py
+    
+    Parameters:
+    ----------
+    df : dask dataframe in which the velcoity are in degree per second
+    lat : name of the column corresponding to latitude, defaults is 'lat'
+    """     
+    df["zonal_velocity"] = df["zonal_velocity"]* 1000. * 1.852 * 60. * np.cos(df[lat] * np.pi / 180)
+    df["meridional_velocity"] = df["meridional_velocity"] * 1000. * 1.852 * 60.
+    return df
+
+# ------------------------------ geographical coordinates ---------------------------------------
+
+def add_geodata(df):
+
+    df['lon'] = df.apply(lambda r: r.name[0].mid, axis=1)
+    df['lat'] = df.apply(lambda r: r.name[1].mid, axis=1)
+
+#    def build_polygon(r):
+#        lon0, lon1 = r.name[0].left, r.name[0].right
+#       lat0, lat1 = r.name[1].left, r.name[1].right
+#        return Polygon([[lon0, lat0],[lon1, lat0], [lon1, lat1], [lon0, lat1]])
+
+#    df['Coordinates'] = df.apply(build_polygon, axis=1)
+#    df = geopandas.GeoDataFrame(df, geometry='Coordinates', crs='EPSG:4326')
+#    df['area'] = df.to_crs(crs = 'epsg:3857').area /1e6 / 1e4 # 100km^2 units
+    
+    return df
