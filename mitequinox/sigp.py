@@ -158,17 +158,22 @@ def get_chunks(N, v, power=1, verbose=0):
     return target_chunks
 
 
-def print_rechunk(r, v):
+def print_rechunk(r, v=None):
     """
     Parameters:
         r: rechunker instance
         v: variable name
     """
 
-    s = r._source[v]
-    i = r._intermediate[v]
-    t = r._target[v]
-
+    if v is not None:
+        s = r._source[v].data
+        i = r._intermediate[v]
+        t = r._target[v]
+    else:
+        s = r._source
+        i = r._intermediate
+        t = r._target
+                
     # source size
     print(
         "Source data size: \t\t "
@@ -178,13 +183,13 @@ def print_rechunk(r, v):
 
     print(
         "Source chunk size: \t\t "
-        + "x".join("{}".format(v) for v in s.data.chunksize)
-        + "\t\t {:.1f}MB".format(np.prod(s.data.chunksize) * 4 / 1e6)
+        + "x".join("{}".format(v) for v in s.chunksize)
+        + "\t\t {:.1f}MB".format(np.prod(s.chunksize) * 4 / 1e6)
     )
 
     print(
         "Source number of files: \t\t {:d}".format(
-            int(np.prod(s.shape) / np.prod(s.data.chunksize))
+            int(np.prod(s.shape) / np.prod(s.chunksize))
         )
     )
 

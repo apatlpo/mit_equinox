@@ -317,6 +317,8 @@ def time_window_processing(
             Keyword arguments for myfun
 
     """
+    from pandas.api.types import is_datetime64_any_dtype as is_datetime
+    
     if hasattr(df, id_label):
         dr_id = df[id_label].unique()[0]
     elif df.index.name == id_label:
@@ -357,24 +359,29 @@ def time_window_processing(
     #
     df = df.set_index("time")
     tmin, tmax = df.index[0], df.index[-1]
+    t_is_date = is_datetime(df.index)
     #
     # need to create an empty dataframe, in case the loop below is empty
     # get column names from fake output:
-    myfun_out = myfun(*[None for c in columns], N, dt=dt, **myfun_kwargs)
+    myfun_out = myfun(*[None for c in columns], N, dt, **myfun_kwargs)
+    size_out = myfun_out.index.size
     #
     columns_out = [dim_x, dim_y] + ["id"] + list(myfun_out.index)
     out = pd.DataFrame({c: [] for c in columns_out})
     t = tmin
     while t + T < tmax:
         #
-        _df = df.loc[t : t + T].iloc[:-1, :]
-        # note: iloc is here because pandas include the last date
+        _df = df.loc[t : t + T]
+        if t_is_date:
+            # iloc because pandas include the last date
+            _df = _df.iloc[:-1, :]
         # compute average position
         x, y = mean_position(_df, Lx=Lx)
         # apply myfun
-        myfun_out = myfun(*[_df[c] for c in columns], N, dt=dt, **myfun_kwargs)
+        myfun_out = myfun(*[_df[c] for c in columns], N, dt, **myfun_kwargs)
         # combine with mean position and time
-        out.loc[t + T / 2.0] = [x, y] + [dr_id] + list(myfun_out)
+        if myfun_out.index.size == size_out:
+            out.loc[t + T / 2.0] = [x, y] + [dr_id] + list(myfun_out)
         t += T * (1 - overlap)
     return out
 
@@ -421,7 +428,7 @@ def mean_position(df, Lx=None):
         return x, y
 
 
-def get_spectrum(v, N, dt=None, method="welch", detrend="linear", **kwargs):
+def get_spectrum(v, N, dt=None, method="welch", detrend=False, **kwargs):
     """Compute a lagged correlation between two time series
     These time series are assumed to be regularly sampled in time
     and along the same time line.
@@ -442,8 +449,8 @@ def get_spectrum(v, N, dt=None, method="welch", detrend="linear", **kwargs):
             Method that will be employed for spectral calculations.
             Default is 'welch'
 
-        detrend: boolean, optional
-            Turns detrending on or off. Default is 'linear'.
+        detrend: str or function or False, optional
+            Turns detrending on or off. Default is False.
 
     See:
         - https://docs.scipy.org/doc/scipy-0.14.0/reference/generated/scipy.signal.periodogram.html
@@ -456,6 +463,7 @@ def get_spectrum(v, N, dt=None, method="welch", detrend="linear", **kwargs):
         _v = v.iloc[:N]
     if dt is None:
         dt = _v.reset_index()["index"].diff().mean()
+    
     if detrend and not method == "welch":
         print("!!! Not implemented yet except for welch")
     if method == "welch":
@@ -463,11 +471,11 @@ def get_spectrum(v, N, dt=None, method="welch", detrend="linear", **kwargs):
         dkwargs = {
             "window": "hann",
             "return_onesided": False,
-            "detrend": None,
+            "detrend": detrend,
             "scaling": "density",
         }
         dkwargs.update(kwargs)
-        f, E = signal.periodogram(_v, fs=1 / dt, axis=0, **dkwargs)
+        f, E = signal.periodogram(_v, fs=1/dt, axis=0, **dkwargs)
     elif method == "mtspec":
         from mtspec import mtspec
         lE, f = mtspec(

@@ -5,8 +5,9 @@ Download Miniconda3 (i.e. for python3) from the [conda website](https://conda.io
 bash Miniconda3-latest-Linux-x86_64.sh
 bash
 conda update conda
-conda create -n equinox -c conda-forge python=3.8 dask dask-jobqueue \
+conda create -n equinox -c conda-forge python=3.8 dask-jobqueue \
             xarray zarr netcdf4 python-graphviz \
+            fastparquet pyarrow \
             tqdm \
             jupyterlab ipywidgets \
             cartopy geopandas descartes \
@@ -15,19 +16,21 @@ conda create -n equinox -c conda-forge python=3.8 dask dask-jobqueue \
             intake-xarray gcsfs \
             cmocean gsw \
             xhistogram \
-            pytide pyinterp
+            pytide pyinterp \
+            parcels
 conda activate equinox
 #conda install -c conda-forge xgcm xmitgcm
 pip install git+https://github.com/xgcm/xgcm.git
 #conda install -c conda-forge xgcm
 pip install git+https://github.com/MITgcm/xmitgcm.git
 pip install git+https://github.com/xgcm/xrft.git
-pip install rechunker
-conda install -c conda-forge parcels
+#pip install rechunker
+pip install git+https://github.com/pangeo-data/rechunker.git
+#conda install -c conda-forge parcels
 pip install h3
-conda install -c conda-forge zstandard  # maybe not necessary with following line:
+#conda install -c conda-forge zstandard  # maybe not necessary with following line:
 #conda install -c conda-forge fastparquet
-conda install fastparquet pyarrow -c conda-forge
+#conda install fastparquet pyarrow -c conda-forge
 conda install pywavelets
 pip install git+git://github.com/psf/black
 #
