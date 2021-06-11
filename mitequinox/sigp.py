@@ -221,35 +221,51 @@ def print_rechunk(r, v=None):
 # ------------------------------ temporal filters ---------------------------------------
 
 
-def generate_filter(band, numtaps=24 * 10, dt=1/24, lat=None, domega=None, ndomega=None):
+def generate_filter(band, T=10, dt=1/24, lat=None, bandwidth=None, normalized_bandwidth=None):
     """Wrapper around scipy.signal.firwing
+    
+    Parameters
+    ----------
+    band: str, float
+        Frequency band (e.g. "semidiurnal", ...) or filter central frequency
+    T: float
+        Filter length in days
+    dt: float
+        Filter/time series time step
+    lat: float
+        Latitude (for inertial band)
+    bandwidth: float
+        Filter bandwidth in cpd
     dt: float
         hours
     """
-    params = {}
+    numtaps = int(T*24)    
     pass_zero = False
-    if band == "semidiurnal":
-        omega = 2
+    #
+    if band == "subdiurnal":
+        pass_zero = True
+        cutoff = [1.0 / 2.0]    
+    elif band == "semidiurnal":
+        omega = 1.9322 #  M2 24/12.4206012 = 1.9322
     elif band == "diurnal":
-        omega = 1
+        omega = 1. # K1 24/23.93447213 = 1.0027
     elif band == "inertial":
         try:
             omega = coriolis(lat) * 3600 / 2.0 / np.pi
         except:
-            print("latitude needs to be provided to gen_filter")
+            print("latitude needs to be provided to generate_filter")
     elif isinstance(band, float):
         omega = band
     #
-    if domega is not None:
-        cutoff = [omega - domega, omega + domega]
-    elif ndomega is not None:
-        cutoff = [omega * (1 - ndomega), omega * (1.0 + ndomega)]
+    if bandwidth is not None:
+        cutoff = [omega - bandwidth, omega + bandwidth]
+    elif normalized_bandwidth is not None:
+        cutoff = [omega * (1 - normalized_bandwidth), 
+                  omega * (1.0 + normalized_bandwidth),
+                 ]
     elif band != "subdiurnal":
-        print("domega or ndomega needs to be provided to gen_filter")
+        print("bandwidth or normalized_bandwidth needs to be provided")
     #
-    if band == "subdiurnal":
-        pass_zero = True
-        cutoff = [1.0 / 30.0]
     h = signal.firwin(
         numtaps, cutoff=cutoff, pass_zero=pass_zero, fs=1/dt, scale=True
     )
@@ -329,3 +345,17 @@ def getsize(dir_path):
     size = int(process.read().split()[0])  # du returns kb
     process.close()
     return size * 1e3
+
+def get_tidal_frequencies(*args, units="cpd"):
+    """
+    """
+    from pytide import WaveTable
+    td = WaveTable()
+    if units=="cpd":
+        scale=86400/2/np.pi
+    elif units=="cph":
+        scale=3600/2/np.pi
+    else:
+        # cps
+        scale=1/2/np.pi
+    return {c: td.wave(c).freq * scale for c in args}
