@@ -482,9 +482,20 @@ def removekey(d, key):
     del r[key]
     return r
 
-def custom_distribute(ds, op, tmp_dir=None, suffix=None, root=True, **kwargs):
+def custom_distribute(ds, op, 
+                      tmp_dir=None, 
+                      suffix="tmp", 
+                      restart=False,
+                      _root=True,
+                      **kwargs,
+                     ):
     """ Distribute an embarrasingly parallel calculation manually and store chunks to disk
-
+    Data can be written temporarily to disk with a restart capability or directly persisted
+    in memory.
+    
+    Example usages:
+    ds_out = custom_distribute(ds, lambda ds: ds.mean("time"), dim_0=2)
+    ds_out = custom_distribute(ds, lambda ds: ds.mean("time"), dim_0=2, tmp_dir="/path/to/tmp/")
     Parameters
     ----------
     ds: xr.Dataset
@@ -492,19 +503,17 @@ def custom_distribute(ds, op, tmp_dir=None, suffix=None, root=True, **kwargs):
     op: func
         Process the data and return a dataset
     tmp_dir: str, optional
-        temporary output directory
+        temporary output directory, persist data in memory
     suffix: str
         suffix employed for temporary files
     **kwargs:
-        dimensions with chunk size, e.g. (..., face=1) processes 1 face a time
+        dimensions with chunk size, e.g. (..., dim_0=2) processes data sequentially in chunks
+        of size 2 along dimension dim_0
     """
-
-    if tmp_dir is None:
-        tmp_dir = scratch
-
-    if suffix is None:
-        suffix="tmp"
-
+        
+    if restart:
+        assert tmp_dir is not None, "you need to provide tmp_dir if `restart=True`"
+        
     d = list(kwargs.keys())[0]
     c = kwargs[d]
 
@@ -519,22 +528,32 @@ def custom_distribute(ds, op, tmp_dir=None, suffix=None, root=True, **kwargs):
         _ds = ds.isel(**{d: slice(c[0], c[-1]+1)})
         _suffix = suffix+"_{}".format(i)
         if new_kwargs:
-            _out, _Z = custom_distribute(_ds, op, tmp_dir=tmp_dir, suffix=_suffix, root=False, **new_kwargs)
-            D.append(_out)
-            if root:
-                print("{}: {}/{}".format(d,i,len(chunks)))
+            ds_out, _Z = custom_distribute(_ds, op, 
+                                           tmp_dir=tmp_dir, 
+                                           suffix=_suffix, 
+                                           _root=False, 
+                                           **new_kwargs,
+                                          )
+            D.append(ds_out)
             Z.append(_Z)
         else:
-            # store
-            out = op(_ds)
-            zarr = os.path.join(tmp_dir, _suffix)
-            Z.append(zarr)
-            out.to_zarr(zarr, mode="w")
-            D.append(xr.open_zarr(zarr))
-            #print("End reached: {}".format(_suffix))
+            ds_out = op(_ds)
+            if tmp_dir is not None:
+                # store
+                zarr = os.path.join(tmp_dir, _suffix)
+                Z.append(zarr)
+                if not restart or not os.path.isdir(zarr):
+                    ds_out.to_zarr(zarr, mode="w")
+                # load
+                ds_out = xr.open_zarr(zarr)
+            else:
+                # persist data and wait for completion
+                ds_out = ds_out.persist()
+                _ = wait(ds_out)
+            D.append(ds_out)
 
     # merge results back and return
-    ds = xr.concat(D, d) #positions=chunks
+    ds = xr.concat(D, d)
 
     return ds, Z
 
