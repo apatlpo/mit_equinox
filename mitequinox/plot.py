@@ -234,6 +234,10 @@ def plot_pretty(
         vmin = v.min().values
     if vmax is None:
         vmax = v.max().values
+    if "i_g" in v.dims:
+        v = v.rename({"i_g": "i"})
+    if "j_g" in v.dims:
+        v = v.rename({"j_g": "j"})
     #
     MPL_LOCK = threading.Lock()
     with MPL_LOCK:
@@ -241,15 +245,17 @@ def plot_pretty(
             plt.switch_backend("agg")
         colmap = _get_cmap(v, cmap)
         #
-        if "face" not in v.dims:
-            v = v.expand_dims("face")
-        #
         if isinstance(region, dict):
             params = region
         else:
             params = regions[region]
         _extent = params["extent"]
-        _faces = (face for face in params["faces"] if face not in ignore_face)
+        #
+        if "face" not in v.dims:
+            #v = v.expand_dims("face")
+            _faces = [None]
+        elif "faces" in params:
+            _faces = (face for face in params["faces"] if face not in ignore_face)
         _projection = params["projection"]
         _dticks = params["dticks"]
         #
@@ -290,7 +296,10 @@ def plot_pretty(
             if isinstance(swot_tracks, dict):
                 swot_kwargs.update(swot_tracks)
         for face in _faces:
-            vplt = v.sel(face=face)
+            if face is None:
+                vplt = v
+            else:
+                vplt = v.sel(face=face)
             if face in [6, 7, 8, 9]:
                 eps = 0.2  # found empirically
                 # this deals with dateline crossing areas

@@ -95,7 +95,7 @@ def load_grd(V=None, ftype="zarr"):
         List of coordinates to select
     """
     if ftype == "zarr":
-        ds = xr.open_zarr(root_data_dir + "zarr/grid.zarr")
+        ds = xr.open_zarr(ref_data_dir + "grid.zarr")
         if V is not None:
             ds = ds.reset_coords()[V].set_coords(names=V)
     elif ftype == "nc":
@@ -153,7 +153,7 @@ def load_data(V, ftype="zarr", merge=True, **kwargs):
 
 
 def load_data_zarr(v):
-    return xr.open_zarr(root_data_dir + "zarr/" + v + ".zarr")
+    return xr.open_zarr(ref_data_dir + v + ".zarr")
 
 
 def load_data_nc(v, suff="_t*", files=None, **kwargs):
