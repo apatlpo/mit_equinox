@@ -1,5 +1,6 @@
 import os
 from glob import glob
+
 import numpy as np
 import xarray as xr
 import pandas as pd
@@ -10,6 +11,8 @@ from shapely.geometry import Polygon
 import dateutil
 from datetime import timedelta, datetime
 
+from dask.distributed import wait
+
 # ideal dask size
 _chunk_size_threshold = 4000*3000
 
@@ -19,7 +22,6 @@ g = 9.81
 omega_earth = 2.0 * np.pi / 86164.0905
 deg2rad = np.pi / 180.0
 deg2m = 111319
-
 
 def coriolis(lat, signed=False):
     if signed:
@@ -222,7 +224,7 @@ def iters_to_date(iters, delta_t=25.0):
     return dtime
 
 
-def load_common_timeline(V, verbose=True):
+def load_common_timeline(V, raw=False, verbose=True):
     df = load_iters_date_files(V[0]).rename(columns={"file": "file_" + V[0]})
     for v in V[1:]:
         ldf = load_iters_date_files(v)
@@ -487,6 +489,7 @@ def custom_distribute(ds, op,
                       suffix="tmp", 
                       restart=False,
                       _root=True,
+                      op_kwargs={},
                       **kwargs,
                      ):
     """ Distribute an embarrasingly parallel calculation manually and store chunks to disk
@@ -496,6 +499,7 @@ def custom_distribute(ds, op,
     Example usages:
     ds_out = custom_distribute(ds, lambda ds: ds.mean("time"), dim_0=2)
     ds_out = custom_distribute(ds, lambda ds: ds.mean("time"), dim_0=2, tmp_dir="/path/to/tmp/")
+    
     Parameters
     ----------
     ds: xr.Dataset
@@ -504,8 +508,10 @@ def custom_distribute(ds, op,
         Process the data and return a dataset
     tmp_dir: str, optional
         temporary output directory, persist data in memory
-    suffix: str
+    suffix: str, optional
         suffix employed for temporary files
+    op_kwargs: dict, optional
+        pass kwargs to op
     **kwargs:
         dimensions with chunk size, e.g. (..., dim_0=2) processes data sequentially in chunks
         of size 2 along dimension dim_0
@@ -531,13 +537,14 @@ def custom_distribute(ds, op,
             ds_out, _Z = custom_distribute(_ds, op, 
                                            tmp_dir=tmp_dir, 
                                            suffix=_suffix, 
-                                           _root=False, 
+                                           _root=False,
+                                           op_kwargs=op_kwargs,
                                            **new_kwargs,
                                           )
             D.append(ds_out)
             Z.append(_Z)
         else:
-            ds_out = op(_ds)
+            ds_out = op(_ds, **op_kwargs)
             if tmp_dir is not None:
                 # store
                 zarr = os.path.join(tmp_dir, _suffix)

@@ -24,7 +24,7 @@ from .utils import *
 def transpose_rechunk(
     ds,
     chunks,
-    iters,
+    iters=None,
     face=None,
     subsampling=None,
     name=None,
@@ -82,11 +82,12 @@ def transpose_rechunk(
             return
 
     # select common time line
-    t0 = ds["time"].where(ds.iters == iters[0], drop=True).values[0]
-    t1 = ds["time"].where(ds.iters == iters[-1], drop=True).values[0]
-    ds = ds.sel(time=slice(t0, t1))
-    ds["dtime"] = ds["dtime"].compute()
-    ds["iters"] = ds["iters"].compute()
+    if iters is not None:
+        t0 = ds["time"].where(ds.iters == iters[0], drop=True).values[0]
+        t1 = ds["time"].where(ds.iters == iters[-1], drop=True).values[0]
+        ds = ds.sel(time=slice(t0, t1))
+        ds["dtime"] = ds["dtime"].compute()
+        ds["iters"] = ds["iters"].compute()
 
     if subsampling is not None:
         i_dim, j_dim = get_ij_dims(ds[v])
