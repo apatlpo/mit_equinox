@@ -25,8 +25,14 @@ pip install git+https://github.com/xgcm/xgcm.git
 pip install git+https://github.com/MITgcm/xmitgcm.git
 pip install git+https://github.com/xgcm/xrft.git
 #pip install rechunker
-pip install git+https://github.com/pangeo-data/rechunker.git
-#conda install -c conda-forge parcels
+#pip install git+https://github.com/pangeo-data/rechunker.git
+# need to download and revert to version v0.3.3 for now, see https://github.com/pangeo-data/rechunker/issues/92
+git clone https://github.com/pangeo-data/rechunker.git
+cd rechunker
+git checkout 0.3.3 ??
+pip install -e .
+conda install libnetcdf=4.6.1
+conda install -c fbriol pyfes
 pip install h3
 #conda install -c conda-forge zstandard  # maybe not necessary with following line:
 #conda install -c conda-forge fastparquet
