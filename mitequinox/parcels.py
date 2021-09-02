@@ -85,6 +85,11 @@ class tiler(object):
         tile_dir=None,
         name="tiling",
         N_extra=1000,
+        global_llc=True,
+        lonmin=-180.,
+        lonmax=180.,
+        latmin=-80.,
+        latmax=80.
     ):
         """ Object handling a custom tiling of global llc data
         Parameters
@@ -101,7 +106,8 @@ class tiler(object):
                 number of extra points added around the dateline
         """
         if ds is not None:
-            self._build(ds, factor, overlap, N_extra)
+            self._build(ds, factor, overlap, N_extra,
+                       global_llc, lonmin, lonmax, latmin, latmax)
             self.name = name
         elif tile_dir is not None:
             self._load(tile_dir)
@@ -110,7 +116,9 @@ class tiler(object):
         self.crs_wgs84 = crs_wgs84
         self.N_extra = N_extra
 
-    def _build(self, ds, factor, overlap, N_extra, projection=None):
+    def _build(self, ds, factor, overlap, N_extra, 
+               global_llc, lonmin, lonmax, latmin, latmax, 
+               projection=None):
         """Generate tiling
         Parameters
         ----------
@@ -135,15 +143,20 @@ class tiler(object):
 
         # concatenate face data
         ds = llc.faces_dataset_to_latlon(ds)
-
+        
+        if not global_llc:
+            ds = ds.where((lonmin < ds.XC) & (ds.XC < lonmax)
+             & (latmin < ds.YC) & (ds.YC < latmax), drop=True)
+        
         # store initial grid size
         global_domain_size = ds.i.size, ds.j.size
 
-        # add N_extra points along longitude to allow wrapping around dateline
-        ds_extra = ds.isel(i=slice(0, N_extra), i_g=slice(0, N_extra))
-        for dim in ["i", "i_g"]:
-            ds_extra[dim] = ds_extra[dim] + ds[dim][-1] + 1
-        ds = xr.merge([xr.concat([ds[v], ds_extra[v]], ds[v].dims[-1]) for v in ds])
+        if global_llc:
+            # add N_extra points along longitude to allow wrapping around dateline
+            ds_extra = ds.isel(i=slice(0, N_extra), i_g=slice(0, N_extra))
+            for dim in ["i", "i_g"]:
+                ds_extra[dim] = ds_extra[dim] + ds[dim][-1] + 1
+            ds = xr.merge([xr.concat([ds[v], ds_extra[v]], ds[v].dims[-1]) for v in ds])
 
         # start tiling
         tiles_1d, boundaries_1d = {}, {}
@@ -548,7 +561,8 @@ def generate_randomly_located_data(lon=(0, 180), lat=(0, 90), N=1000):
     return geopandas.GeoSeries(points, crs=crs_wgs84)
 
 
-def tile_store_llc(ds, time_slice, tl, persist=False, netcdf=False):
+def tile_store_llc(ds, time_slice, tl, persist=False, netcdf=False, 
+                   global_llc=True, lonmin=-180., lonmax=180., latmin=-80., latmax=80.):
     """ 
     """
 
@@ -565,22 +579,27 @@ def tile_store_llc(ds, time_slice, tl, persist=False, netcdf=False):
                 ds_tsubset[m[1]].attrs["mate"] = m[0]
         ds_tsubset = llc.faces_dataset_to_latlon(ds_tsubset).drop("face")
 
-    # add N_extra points along longitude to allow wrapping around dateline
-    ds_extra = ds_tsubset.isel(i=slice(0, tl.N_extra), 
-                               i_g=slice(0, tl.N_extra)
-                              )
-    for dim in ["i", "i_g"]:
-        ds_extra[dim] = ds_extra[dim] + ds_tsubset[dim][-1] + 1
-    ds_tsubset = xr.merge(
-        [
-            xr.concat([ds_tsubset[v], ds_extra[v]], ds_tsubset[v].dims[-1])
-            for v in ds_tsubset
-        ]
-    )
+    if global_llc:
+        # add N_extra points along longitude to allow wrapping around dateline
+        ds_extra = ds_tsubset.isel(i=slice(0, tl.N_extra), 
+                                   i_g=slice(0, tl.N_extra)
+                                  )
+        for dim in ["i", "i_g"]:
+            ds_extra[dim] = ds_extra[dim] + ds_tsubset[dim][-1] + 1
+        ds_tsubset = xr.merge(
+            [
+                xr.concat([ds_tsubset[v], ds_extra[v]], ds_tsubset[v].dims[-1])
+                for v in ds_tsubset
+            ]
+        )
 
     # shift horizontal grid to match parcels (NEMO) convention
     ds_tsubset = fuse_dimensions(ds_tsubset)
 
+    if not global_llc:
+        ds_tsubset = ds_tsubset.where((lonmin < ds_tsubset.XC) & (ds_tsubset.XC < lonmax)
+         & (latmin < ds_tsubset.YC) & (ds_tsubset.YC < latmax), drop=True)
+        
     if persist:
         ds_tsubset = ds_tsubset.persist()
 
