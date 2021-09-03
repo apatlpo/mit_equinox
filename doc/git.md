@@ -1,4 +1,17 @@
 
+## github
+
+Setting up an ssh key exchange
+
+- (potentially) [switch from http to ssh origin](https://docs.github.com/en/get-started/getting-started-with-git/managing-remote-repositories#switching-remote-urls-from-ssh-to-https)
+- [Generate a key](https://docs.github.com/en/github/authenticating-to-github/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent) on local computer
+- [Add new key](https://docs.github.com/en/github/authenticating-to-github/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account) on github
+
+
+---
+
+## git
+
 Reference:
 
 https://git-scm.com/book/en/v2/Git-Branching-Remote-Branches
@@ -41,4 +54,3 @@ Checkout a file from another branch
 git checkout mybranch
 git checkout otherbranch -- dev/file.py
 ```
-
