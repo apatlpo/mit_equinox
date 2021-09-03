@@ -7,6 +7,8 @@ Contains code that process mitgcm output for the EQUINOx project
 
 - doc/ : conda and git info
 
+- ...
+
 ---
 ## install
 
