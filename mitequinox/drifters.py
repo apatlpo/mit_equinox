@@ -493,27 +493,7 @@ def get_spectrum(v, N, dt=None, method="welch", detrend=False, **kwargs):
 
 # --------------------------------------  utils ------------------------------------------------
 
-earth_radius = 6378.0
 deg2rad = np.pi / 180.0
-
-def haversine(lon1, lat1, lon2, lat2):
-    """Computes the Haversine distance in kilometres between two points
-    :param x: first point or points as array, each as array of latitude, longitude in degrees
-    :param y: second point or points as array, each as array of latitude, longitude in degrees
-    :return: distance between the two points in kilometres
-    """
-    llat1 = lat1 * deg2rad
-    llat2 = lat2 * deg2rad
-    llon1 = lon1 * deg2rad
-    llon2 = lon2 * deg2rad
-    arclen = 2 * np.arcsin(
-        np.sqrt(
-            (np.sin((llat2 - llat1) / 2)) ** 2
-            + np.cos(llat1) * np.cos(llat2) * (np.sin((llon2 - llon1) / 2)) ** 2
-        )
-    )
-    return arclen * earth_radius
-
 
 # geodesy with vectors
 # https://www.movable-type.co.uk/scripts/latlong-vectors.html

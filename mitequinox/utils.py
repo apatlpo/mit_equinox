@@ -16,14 +16,33 @@ from dask.distributed import wait
 # ideal dask size
 _chunk_size_threshold = 4000*3000
 
-# ------------------------------ parameters -------------------------------------
+# ------------------------------ parameters, geometry -------------------------------------
 
 g = 9.81
 omega_earth = 2.0 * np.pi / 86164.0905
 deg2rad = np.pi / 180.0
 deg2m = 111319
+earth_radius = 6378.0
 
-def coriolis(lat, signed=False):
+def haversine(lon1, lat1, lon2, lat2):
+    """Computes the Haversine distance in kilometres between two points
+    :param x: first point or points as array, each as array of latitude, longitude in degrees
+    :param y: second point or points as array, each as array of latitude, longitude in degrees
+    :return: distance between the two points in kilometres
+    """
+    llat1 = lat1 * deg2rad
+    llat2 = lat2 * deg2rad
+    llon1 = lon1 * deg2rad
+    llon2 = lon2 * deg2rad
+    arclen = 2 * np.arcsin(
+        np.sqrt(
+            (np.sin((llat2 - llat1) / 2)) ** 2
+            + np.cos(llat1) * np.cos(llat2) * (np.sin((llon2 - llon1) / 2)) ** 2
+        )
+    )
+    return arclen * earth_radius
+
+def coriolis(lat, signed=True):
     if signed:
         return 2.0 * omega_earth * np.sin(lat * deg2rad)
     else:
@@ -234,6 +253,32 @@ def load_common_timeline(V, raw=False, verbose=True):
         print(df.index[0], " to ", df.index[-1])
     return df
 
+def find_ijface(lon, lat, face=None, radius=2):
+    """ Find indexes based on lon/lat within a given radius
+    
+    Parameters
+    ----------
+    lon, lat: floats
+    face: int
+    radius: float
+        in km !!
+    """
+
+    grd = load_grd(["XC", "YC"])
+
+    if face is not None:
+        grd = grd.sel(face=face)
+
+    #d = (np.cos(np.pi/180*grd.)*(grd.XC-lon))**2 + (grd.XC-lat)**2
+    d = haversine(lon, lat, grd.XC, grd.YC)
+    dmin = d.min().compute()
+
+    d_loc = d.where(d<dmin+radius, drop=True).compute()
+    i = {d: slice(int(min(d_loc[d])), int(max(d_loc[d]))+1) for d in ["i", "j", "face"]}
+    i["i_g"] = i["i"]
+    i["j_g"] = i["j"]
+    
+    return i
 
 # ------------------------------ diagnosics -----------------------------------
 

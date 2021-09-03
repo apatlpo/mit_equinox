@@ -30,7 +30,7 @@ from parcels import FieldSet, ParticleSet, ParticleFile, plotTrajectoriesFile, V
 from parcels import JITParticle, ScipyParticle
 from parcels import ErrorCode, NestedField, AdvectionEE, AdvectionRK4
 
-from .drifters import haversine
+from .utils import haversine
 
 # ------------------------------- dir tree management ------------------------------
 
