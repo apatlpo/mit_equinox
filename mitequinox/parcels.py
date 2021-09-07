@@ -426,9 +426,10 @@ class tiler(object):
         
     def clean_up(self, run_dir, step):
         """ Clean up netcdf files older than step
+            Clean up only float files, not llc.nc file
         """
         for t in range(self.N_tiles):
-            ncfiles = glob(os.path.join(run_dir, "data_{:03d}/*.nc".format(t)))
+            ncfiles = glob(os.path.join(run_dir, "data_{:03d}/float*.nc".format(t)))
             for f in ncfiles:
                 f_step = f.split('/')[-1].split('_')[1]
                 if int(f_step)>=step:
@@ -616,7 +617,14 @@ def tile_store_llc(ds, time_slice, tl, persist=False, netcdf=False,
             ds_tiles.append(ds_tile.chunk(chunks={"time": 1}))
     return ds_tiles
 
-
+def load_ds_tile(tl):
+    ds_tiles = []
+    for tile in range(tl.N_tiles):
+        nc_file = os.path.join(tl.run_dirs[tile], "llc.nc")
+        ds_tile = xr.open_dataset(nc_file)
+        ds_tiles.append(ds_tile.chunk(chunks={"time": 1}))
+    return ds_tiles
+    
 # ------------------------------- parcels specific code ----------------------------
 
 
@@ -745,11 +753,11 @@ class run(object):
             )
         self.fieldset = fieldset
 
-    def init_particles(self, ds, dij, debug=None):
-        """Initial particle positions"""
+    def init_grid_particles(self, ds, dij):
+        """Initial particle positions on a grid"""
         tile, tl, fieldset = self.tile, self.tl, self.fieldset
 
-        # first step, create drifters positions
+        # Create drifters positions for grid release every dij grid point
         x = (
             ds[["XC", "YC"]]
             .isel(i=slice(0, None, dij), j=slice(0, None, dij))
@@ -763,15 +771,43 @@ class run(object):
         xv, yv = xv[in_tile[in_tile == tile].index], yv[in_tile[in_tile == tile].index]
         # store initial positions along with relevant surounding area
         # will be store in the first file, just need a mechanism to read them back
-        #
+        lon=xv.flatten()
+        lat=yv.flatten()
+        return lon,lat
+        
+    def init_particles(self, ds, dij, lon, lat, time, debug=None): 
+        """Initial particle positions"""
+        tile, tl, fieldset = self.tile, self.tl, self.fieldset
+
+        # Initialize lon,lat with grided positions (every dij grid point)
+        if lon is None:
+            lon,lat = init_grid_particles(ds, dij)
+            #x = (
+            #    ds[["XC", "YC"]]
+            #    .isel(i=slice(0, None, dij), j=slice(0, None, dij))
+            #    .stack(drifter=("i", "j"))
+            #    .reset_coords()
+            #)
+            #x = x.where(x.Depth > 0, drop=True)
+            ## use tile to select points within the tile (most time conssuming operation)
+            #xv, yv = x.XC.values, x.YC.values
+            #in_tile = tl.assign(lon=xv, lat=yv, tiles=[tile])
+            #xv, yv = xv[in_tile[in_tile == tile].index], yv[in_tile[in_tile == tile].index]
+            ## store initial positions along with relevant surounding area
+            ## will be store in the first file, just need a mechanism to read them back
+            #lon=xv.flatten()
+            #lat=yv.flatten()
+            time=None
+
         pset = None
-        if xv.size > 0:
+        if lon.size > 0:
             self.particle_class.setLastID(0)
             pset = ParticleSet(
                 fieldset=fieldset,
                 pclass=self.particle_class,
-                lon=xv.flatten(),
-                lat=yv.flatten(),
+                lon=lon,
+                lat=lat,
+                time=time,
             )
             # pid_orig = np.arange(xv.flatten().size)+(tile*100000),
         # offset parcel id's such as to make sure they do not overlap
@@ -969,6 +1005,7 @@ def step_window(
     tl,
     ds_tile=None,
     init_dij=10,
+    lon=None, lat=None, time=None,
     parcels_remove_on_land=True,
     pclass="jit",
     id_max=None,
@@ -1022,7 +1059,7 @@ def step_window(
 
     # load drifter positions
     if step == 0:
-        prun.init_particles(ds, init_dij)
+        prun.init_particles(ds, init_dij, lon, lat, time)
     else:
         prun.init_particles_restart(seed)
     #if debug==2:
