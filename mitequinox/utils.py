@@ -6,7 +6,7 @@ import xarray as xr
 import pandas as pd
 
 import geopandas as gpd
-from shapely.geometry import Polygon    
+from shapely.geometry import Polygon
 
 import dateutil
 from datetime import timedelta, datetime
@@ -209,7 +209,7 @@ def load_llc(v, dij, t_start, t_end):
     ds = (load_data(V=[v])
           .sel(time=slice(str(t_start), str(t_end)))
          )
-    
+
     i, j = get_ij_dims(ds[v])
     ds = ds.rename({i: 'i', j: 'j'})
     ds = ds.isel(i=slice(0, None, dij),
@@ -219,8 +219,8 @@ def load_llc(v, dij, t_start, t_end):
     if v in ['SSU', 'SSV']:
         coords = coords + ['CS', 'SN']
     grd = (load_grd()[coords]
-           .isel(i=slice(0, None, dij), 
-                 j=slice(0, None, dij), 
+           .isel(i=slice(0, None, dij),
+                 j=slice(0, None, dij),
                 )
           )
     #       .load_grd()[['XC', 'YC', 'XG', 'YG']]
@@ -255,7 +255,7 @@ def load_common_timeline(V, raw=False, verbose=True):
 
 def find_ijface(lon, lat, face=None, radius=2):
     """ Find indexes based on lon/lat within a given radius
-    
+
     Parameters
     ----------
     lon, lat: floats
@@ -277,7 +277,7 @@ def find_ijface(lon, lat, face=None, radius=2):
     i = {d: slice(int(min(d_loc[d])), int(max(d_loc[d]))+1) for d in ["i", "j", "face"]}
     i["i_g"] = i["i"]
     i["j_g"] = i["j"]
-    
+
     return i
 
 # ------------------------------ diagnosics -----------------------------------
@@ -529,9 +529,9 @@ def removekey(d, key):
     del r[key]
     return r
 
-def custom_distribute(ds, op, 
-                      tmp_dir=None, 
-                      suffix="tmp", 
+def custom_distribute(ds, op,
+                      tmp_dir=None,
+                      suffix="tmp",
                       restart=False,
                       _root=True,
                       op_kwargs={},
@@ -540,11 +540,11 @@ def custom_distribute(ds, op,
     """ Distribute an embarrasingly parallel calculation manually and store chunks to disk
     Data can be written temporarily to disk with a restart capability or directly persisted
     in memory.
-    
+
     Example usages:
     ds_out = custom_distribute(ds, lambda ds: ds.mean("time"), dim_0=2)
     ds_out = custom_distribute(ds, lambda ds: ds.mean("time"), dim_0=2, tmp_dir="/path/to/tmp/")
-    
+
     Parameters
     ----------
     ds: xr.Dataset
@@ -561,10 +561,10 @@ def custom_distribute(ds, op,
         dimensions with chunk size, e.g. (..., dim_0=2) processes data sequentially in chunks
         of size 2 along dimension dim_0
     """
-        
+
     if restart:
         assert tmp_dir is not None, "you need to provide tmp_dir if `restart=True`"
-        
+
     d = list(kwargs.keys())[0]
     c = kwargs[d]
 
@@ -579,9 +579,9 @@ def custom_distribute(ds, op,
         _ds = ds.isel(**{d: slice(c[0], c[-1]+1)})
         _suffix = suffix+"_{}".format(i)
         if new_kwargs:
-            ds_out, _Z = custom_distribute(_ds, op, 
-                                           tmp_dir=tmp_dir, 
-                                           suffix=_suffix, 
+            ds_out, _Z = custom_distribute(_ds, op,
+                                           tmp_dir=tmp_dir,
+                                           suffix=_suffix,
                                            _root=False,
                                            op_kwargs=op_kwargs,
                                            **new_kwargs,
@@ -609,17 +609,17 @@ def custom_distribute(ds, op,
 
     return ds, Z
 
-def filter_llc_regionally(t_range, 
-                          v=None, 
-                          faces=None, 
-                          dij=None, 
-                          zarr=None, 
-                          overwrite=True, 
+def filter_llc_regionally(t_range,
+                          v=None,
+                          faces=None,
+                          dij=None,
+                          zarr=None,
+                          overwrite=True,
                           background=None,
                          ):
-    """ Select 
+    """ Select
     """
-    
+
     if background is not None:
         v = background["v"]
         faces = background["region"]["faces"]
@@ -628,21 +628,21 @@ def filter_llc_regionally(t_range,
         assert v is not None
         assert faces is not None
         assert dij is not None
-        
+
     if isinstance(t_range, pd.Index):
         t_range = tuple(t_range[[0,-1]])
-    
+
     if v in ['SSU', 'SSV']:
         V = ['SSU', 'SSV']
     else:
         V = v
     llc = load_llc(V, dij, t_range[0], t_range[1])
     llc = llc.sel(face=faces)
-    
+
     llc = llc.chunk({'time': 1, 'i': -1, 'j': -1})
     if 'chunks' in llc.niter.encoding:
         del llc.niter.encoding['chunks']
-    
+
     if zarr is None:
         zarr = os.path.join(scratch, 'zoom_llc')
     #
@@ -651,7 +651,7 @@ def filter_llc_regionally(t_range,
     else:
         mode='w-'
     llc.to_zarr(zarr, mode=mode)
-    return zarr  
+    return zarr
 
 # ------------------------------ enatl60 specific ---------------------------------------
 
@@ -722,7 +722,7 @@ def load_bathy(subsample=None, extent=None, land=False):
     """
     if platform=="datarmor":
         path = os.path.join(osi, "equinox/misc/bathy/ETOPO1_Ice_g_gmt4.grd")
-    ds = xr.open_dataset(path)        
+    ds = xr.open_dataset(path)
     if subsample is not None:
         ds = ds.isel(x=slice(0, None, subsample),
                      y=slice(0, None, subsample),
@@ -791,7 +791,7 @@ def load_oceans(database="IHO", features=["oceans"]):
 
 def load_swot_tracks(phase="calval", resolution=None, bbox=None, **kwargs):
     """ Load SWOT tracks
-    
+
     Parameters
     ----------
     phase: str, optional
@@ -799,8 +799,11 @@ def load_swot_tracks(phase="calval", resolution=None, bbox=None, **kwargs):
     resolution: str, optional
         Specify resolution, for example "10s", default is "30s"
     """
-    
-    tracks_dir = "/home/datawork-lops-osi/equinox/misc/swot"
+
+    if platform=="datarmor":
+        tracks_dir = "/home/datawork-lops-osi/equinox/misc/swot"
+    else:
+        tracks_dir = "/Users/aponte/Data/swot"
     #
     files = glob(os.path.join(tracks_dir, "*.shp"))
     files = [f for f in files if phase in f]
@@ -808,21 +811,19 @@ def load_swot_tracks(phase="calval", resolution=None, bbox=None, **kwargs):
         files = [f for f in files if resolution in f]
     dfiles = {f.split("_")[-1].split(".")[0]: f for f in files}
     out = {key: gpd.read_file(f, **kwargs) for key, f in dfiles.items()}
-    
+
     if bbox is None:
         return out
-        
+
     central_lon = (bbox[0]+bbox[1])*0.5
     central_lat = (bbox[2]+bbox[3])*0.5
 
-    polygon = Polygon([(bbox[0], bbox[2]), 
-                       (bbox[1], bbox[2]), 
-                       (bbox[1], bbox[3]), 
-                       (bbox[0], bbox[3]), 
+    polygon = Polygon([(bbox[0], bbox[2]),
+                       (bbox[1], bbox[2]),
+                       (bbox[1], bbox[3]),
+                       (bbox[0], bbox[3]),
                        (bbox[0], bbox[2]),
                       ])
     out = {key: gpd.clip(gdf, polygon) for key, gdf in out.items()}
 
     return out
-    
-    
