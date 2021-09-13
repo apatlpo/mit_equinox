@@ -429,7 +429,7 @@ class tiler(object):
             Clean up only float files, not llc.nc file
         """
         for t in range(self.N_tiles):
-            ncfiles = glob(os.path.join(run_dir, "data_{:03d}/float*.nc".format(t)))
+            ncfiles = glob(os.path.join(run_dir, "data_{:03d}/floats_*_*.nc".format(t)))
             for f in ncfiles:
                 f_step = f.split('/')[-1].split('_')[1]
                 if int(f_step)>=step:
