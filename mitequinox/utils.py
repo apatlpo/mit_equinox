@@ -110,8 +110,9 @@ elif os.path.isdir("/Users/aponte"):
 
 
 def load_grd(V=None, ftype="zarr"):
-    """
-    Parameters:
+    """ Load llc4320 grid
+    Parameters
+    ----------
         V: str, list, optional
         List of coordinates to select
     """
