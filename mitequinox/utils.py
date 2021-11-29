@@ -13,6 +13,8 @@ from datetime import timedelta, datetime
 
 from dask.distributed import wait
 
+from tqdm import tqdm
+
 # ideal dask size
 _chunk_size_threshold = 4000*3000
 
@@ -109,7 +111,7 @@ elif os.path.isdir("/Users/aponte"):
 # ------------------------------ mit specific ---------------------------------------
 
 
-def load_grd(V=None, ftype="zarr"):
+def load_grd(V=None, ftype="zarr", **kwargs):
     """ Load llc4320 grid
     Parameters
     ----------
@@ -117,11 +119,11 @@ def load_grd(V=None, ftype="zarr"):
         List of coordinates to select
     """
     if ftype == "zarr":
-        ds = xr.open_zarr(ref_data_dir + "grid.zarr")
+        ds = xr.open_zarr(ref_data_dir + "grid.zarr", **kwargs)
         if V is not None:
             ds = ds.reset_coords()[V].set_coords(names=V)
     elif ftype == "nc":
-        ds = _load_grd_nc(V)
+        ds = _load_grd_nc(V, **kwargs)
     return ds
 
 
@@ -174,8 +176,8 @@ def load_data(V, ftype="zarr", merge=True, **kwargs):
             return load_data_nc(V, **kwargs)
 
 
-def load_data_zarr(v):
-    return xr.open_zarr(ref_data_dir + v + ".zarr")
+def load_data_zarr(v, **kwargs):
+    return xr.open_zarr(ref_data_dir + v + ".zarr", **kwargs)
 
 
 def load_data_nc(v, suff="_t*", files=None, **kwargs):
@@ -506,6 +508,32 @@ def _auto_rechunk(ds):
 
 # ------------------------------ misc ---------------------------------------
 
+face_connections = {'face': {0: {'X': ((12, 'Y', False), (3, 'X', False)),
+              'Y': (None, (1, 'Y', False))},
+          1: {'X': ((11, 'Y', False), (4, 'X', False)),
+              'Y': ((0, 'Y', False), (2, 'Y', False))},
+          2: {'X': ((10, 'Y', False), (5, 'X', False)),
+              'Y': ((1, 'Y', False), (6, 'X', False))},
+          3: {'X': ((0, 'X', False), (9, 'Y', False)),
+              'Y': (None, (4, 'Y', False))},
+          4: {'X': ((1, 'X', False), (8, 'Y', False)),
+              'Y': ((3, 'Y', False), (5, 'Y', False))},
+          5: {'X': ((2, 'X', False), (7, 'Y', False)),
+              'Y': ((4, 'Y', False), (6, 'Y', False))},
+          6: {'X': ((2, 'Y', False), (7, 'X', False)),
+              'Y': ((5, 'Y', False), (10, 'X', False))},
+          7: {'X': ((6, 'X', False), (8, 'X', False)),
+              'Y': ((5, 'X', False), (10, 'Y', False))},
+          8: {'X': ((7, 'X', False), (9, 'X', False)),
+              'Y': ((4, 'X', False), (11, 'Y', False))},
+          9: {'X': ((8, 'X', False), None),
+              'Y': ((3, 'X', False), (12, 'Y', False))},
+          10: {'X': ((6, 'Y', False), (11, 'X', False)),
+               'Y': ((7, 'Y', False), (2, 'X', False))},
+          11: {'X': ((10, 'X', False), (12, 'X', False)),
+               'Y': ((8, 'Y', False), (1, 'X', False))},
+          12: {'X': ((11, 'X', False), None),
+               'Y': ((9, 'Y', False), (0, 'X', False))}}}
 
 def getsize(dir_path):
     """Returns the size of a directory in bytes"""
@@ -533,7 +561,8 @@ def removekey(d, key):
 def custom_distribute(ds, op,
                       tmp_dir=None,
                       suffix="tmp",
-                      restart=False,
+                      overwrite=True,
+                      append=False,
                       _root=True,
                       op_kwargs={},
                       **kwargs,
@@ -543,8 +572,8 @@ def custom_distribute(ds, op,
     in memory.
 
     Example usages:
-    ds_out = custom_distribute(ds, lambda ds: ds.mean("time"), dim_0=2)
-    ds_out = custom_distribute(ds, lambda ds: ds.mean("time"), dim_0=2, tmp_dir="/path/to/tmp/")
+    ds_out = custom_distribute(ds, lambda ds: ds.mean("time"), dim_0=2) # persists data
+    ds_out = custom_distribute(ds, lambda ds: ds.mean("time"), dim_0=2, tmp_dir="/path/to/tmp/") # writes data on disk
 
     Parameters
     ----------
@@ -556,28 +585,44 @@ def custom_distribute(ds, op,
         temporary output directory, persist data in memory
     suffix: str, optional
         suffix employed for temporary files
+    overwrite: optional, boolean
+        set to False if you do not want to overwrite existing data. Default is True
+    append: optional, boolean
+        append to a single zarr archive 
+        ! only works for distribution only a single dimension at the moment !
     op_kwargs: dict, optional
         pass kwargs to op
     **kwargs:
         dimensions with chunk size, e.g. (..., dim_0=2) processes data sequentially in chunks
         of size 2 along dimension dim_0
     """
-
-    if restart:
-        assert tmp_dir is not None, "you need to provide tmp_dir if `restart=True`"
-
+    
     d = list(kwargs.keys())[0]
     c = kwargs[d]
 
     new_kwargs = removekey(kwargs, d)
-
     dim = ds[d].values
     chunks = [dim[i*c:(i+1)*c] for i in range((dim.size + c - 1) // c )]
 
-    D = []
-    Z = []
-    for c, i in zip(chunks, range(len(chunks))):
-        _ds = ds.isel(**{d: slice(c[0], c[-1]+1)})
+    # various conditions should be fullfilled:
+    assert not overwrite or tmp_dir is not None, "tmp_dir is required if `overwrite=False`"
+    assert not append or not new_kwargs, "Appending data to a single zarr archive is"\
+        +" not implemented for multiple dimensions"
+    assert overwrite or not append, "overwrite=False and append=True should not make sense"\
+        +" at the moment"
+    assert not append and c>1, "the size of the chunks along the selected dimension needs to"\
+        +" be greater than 1 if you want to append to a single zarr archive, see "\
+        +" https://github.com/pydata/xarray/issues/4084"
+    
+    D, Z = [], []
+    iterator = zip(chunks, range(len(chunks)))
+    if _root:
+        iterator = tqdm(iterator)
+        # tqdm may be redirected to the logger and a file:
+        # https://github.com/tqdm/tqdm/issues/313
+    for c, i in iterator:
+        #_ds = ds.isel(**{d: slice(c[0], c[-1]+1)})
+        _ds = ds.sel(**{d: c})
         _suffix = suffix+"_{}".format(i)
         if new_kwargs:
             ds_out, _Z = custom_distribute(_ds, op,
@@ -593,16 +638,84 @@ def custom_distribute(ds, op,
             ds_out = op(_ds, **op_kwargs)
             if tmp_dir is not None:
                 # store
-                zarr = os.path.join(tmp_dir, _suffix)
-                Z.append(zarr)
-                if not restart or not os.path.isdir(zarr):
-                    ds_out.to_zarr(zarr, mode="w")
-                # load
-                ds_out = xr.open_zarr(zarr)
+                if append:
+                    zarr = os.path.join(tmp_dir, suffix)
+                    if not os.path.isdir(zarr): # not sure this is necessary
+                        ds_out.to_zarr(zarr, mode="w")
+                    else:
+                        ds_out.to_zarr(zarr, append_dim=d)
+                else:
+                    zarr = os.path.join(tmp_dir, _suffix)
+                    if overwrite or not os.path.isdir(zarr):
+                        ds_out.to_zarr(zarr, mode="w")
+                    Z.append(zarr)
+                    # load
+                    ds_out = xr.open_zarr(zarr)
             else:
                 # persist data and wait for completion
                 ds_out = ds_out.persist()
                 _ = wait(ds_out)
+            if not append:
+                D.append(ds_out)
+
+    if append:
+        ds = xr.open_zarr(zarr)
+        Z = zarr
+    else:
+        # concatenate results and return
+        ds = xr.concat(D, d)
+
+    return ds, Z
+
+def custom_distribute_concat(ds,
+                             tmp_dir,
+                             suffix="tmp",
+                             _root=True,
+                             **kwargs,
+                            ):
+    """ Load and concatenate data tempory files
+
+    Parameters
+    ----------
+    ds: xr.Dataset
+        Input data
+    tmp_dir: str
+        temporary output directory, persist data in memory
+    suffix: str, optional
+        suffix employed for temporary files
+    **kwargs:
+        dimensions with chunk size, e.g. (..., dim_0=2) processes data sequentially in chunks
+        of size 2 along dimension dim_0
+    """
+
+    d = list(kwargs.keys())[0]
+    c = kwargs[d]
+
+    new_kwargs = removekey(kwargs, d)
+
+    dim = ds[d].values
+    chunks = [dim[i*c:(i+1)*c] for i in range((dim.size + c - 1) // c )]
+
+    D = []
+    Z = []
+    iterator = zip(chunks, range(len(chunks)))
+    for c, i in iterator:
+        _ds = ds.sel(**{d: c})        
+        _suffix = suffix+"_{}".format(i)
+        if new_kwargs:
+            ds_out, _Z = custom_distribute_concat(_ds,
+                                                  tmp_dir,
+                                                  suffix=_suffix,
+                                                  _root=False,
+                                                  **new_kwargs,
+                                                 )
+            D.append(ds_out)
+            Z.append(_Z)
+        else:
+            # load
+            zarr = os.path.join(tmp_dir, _suffix)
+            Z.append(zarr)
+            ds_out = xr.open_zarr(zarr)
             D.append(ds_out)
 
     # merge results back and return
