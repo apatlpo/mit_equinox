@@ -47,6 +47,15 @@ jupyter labextension install @jupyter-widgets/jupyterlab-manager \
 cp launch/jobqueue.yaml launch/distributed.yaml ~/.config/dask/
 ```
 
+To install pange-pytide locally (no working at the moment):
+
+```
+conda install -c conda-forge eigen mkl-include cmake
+git clone https://github.com/CNES/pangeo-pytide.git
+cd pangeo-pytide
+pip install -e .
+```
+
 In order to add the environnement to kernels available to jupyter, you need to run:
 ```
 python -m ipykernel install --user --name equinox --display-name "EQUINOX mit project env"
