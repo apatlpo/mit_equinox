@@ -642,7 +642,7 @@ def custom_distribute(ds, op,
     overwrite: optional, boolean
         set to False if you do not want to overwrite existing data. Default is True
     append: optional, boolean
-        append to a single zarr archive 
+        append to a single zarr archive
         ! only works for distribution only a single dimension at the moment !
     op_kwargs: dict, optional
         pass kwargs to op
@@ -650,7 +650,7 @@ def custom_distribute(ds, op,
         dimensions with chunk size, e.g. (..., dim_0=2) processes data sequentially in chunks
         of size 2 along dimension dim_0
     """
-    
+
     d = list(kwargs.keys())[0]
     c = kwargs[d]
 
@@ -664,10 +664,10 @@ def custom_distribute(ds, op,
         +" not implemented for multiple dimensions"
     assert overwrite or not append, "overwrite=False and append=True should not make sense"\
         +" at the moment"
-    assert not append and c>1, "the size of the chunks along the selected dimension needs to"\
+    assert not append or c>1, "the size of the chunks along the selected dimension needs to"\
         +" be greater than 1 if you want to append to a single zarr archive, see "\
         +" https://github.com/pydata/xarray/issues/4084"
-    
+
     D, Z = [], []
     iterator = zip(chunks, range(len(chunks)))
     if _root:
@@ -754,7 +754,7 @@ def custom_distribute_concat(ds,
     Z = []
     iterator = zip(chunks, range(len(chunks)))
     for c, i in iterator:
-        _ds = ds.sel(**{d: c})        
+        _ds = ds.sel(**{d: c})
         _suffix = suffix+"_{}".format(i)
         if new_kwargs:
             ds_out, _Z = custom_distribute_concat(_ds,
