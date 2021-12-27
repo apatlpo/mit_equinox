@@ -119,7 +119,11 @@ def load_grd(V=None, ftype="zarr", **kwargs):
         List of coordinates to select
     """
     if ftype == "zarr":
-        ds = xr.open_zarr(ref_data_dir + "grid.zarr", **kwargs)
+        dkwargs = dict(consolidated=False)
+        dkwargs.update(**kwargs)
+        ds = xr.open_zarr(ref_data_dir + "grid.zarr", 
+                          **dkwargs,
+                         )
         if V is not None:
             ds = ds.reset_coords()[V].set_coords(names=V)
     elif ftype == "nc":
@@ -177,7 +181,9 @@ def load_data(V, ftype="zarr", merge=True, **kwargs):
 
 
 def load_data_zarr(v, **kwargs):
-    return xr.open_zarr(ref_data_dir + v + ".zarr", **kwargs)
+    dkwargs = dict(consolidated=False)
+    dkwargs.update(**kwargs)
+    return xr.open_zarr(ref_data_dir + v + ".zarr", **dkwargs)
 
 
 def load_data_nc(v, suff="_t*", files=None, **kwargs):
@@ -507,6 +513,54 @@ def _auto_rechunk(ds):
     return ds
 
 # ------------------------------ misc ---------------------------------------
+
+def spin_up_cluster(type=None, 
+                    jobs=None, 
+                    processes=None, 
+                    fraction=0.8,
+                    **kwargs,
+                   ):
+    """ Spin up a dask cluster ... or not
+    Waits for workers to be up for distributed ones
+    
+    Paramaters
+    ----------
+    type: None, str
+        Type of cluster: None=no cluster, "local", "distributed"
+    fraction: float
+        Waits for Fraction of 
+    """
+
+    if type is None:
+        return
+    elif type=="local":
+        from dask.distributed import Client, LocalCluster
+        dkwargs = dict(n_workers=14, threads_per_worker=1)
+        dkwargs.update(**kwargs)
+        cluster = LocalCluster(**dkwargs) # these may not be hardcoded
+        client = Client(cluster)
+    elif type=="distributed":
+        from dask_jobqueue import PBSCluster
+        from dask.distributed import Client
+        assert jobs, "you need to specify a number of dask-queue jobs"
+        cluster = PBSCluster(**kwargs)
+        cluster.scale(jobs=jobs)
+        client = Client(cluster)
+
+        if not processes:
+            processes = cluster.worker_spec[0]["options"]["processes"]
+        
+        flag = True
+        while flag:
+            wk = client.scheduler_info()["workers"]
+            print("Number of workers up = {}".format(len(wk)))
+            sleep(5)
+            if len(wk)>=processes*jobs*fraction:
+                flag = False
+                print("Cluster is up, proceeding with computations")
+
+    return cluster, client
+
 
 face_connections = {'face': {0: {'X': ((12, 'Y', False), (3, 'X', False)),
               'Y': (None, (1, 'Y', False))},
