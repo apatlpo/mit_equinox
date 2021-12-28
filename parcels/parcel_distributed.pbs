@@ -1,0 +1,20 @@
+#!/bin/csh
+#PBS -l walltime=48:00:00
+#PBS -q mpi_1
+#PBS -l select=1:ncpus=28:mem=100g
+
+# cd to the directory you submitted your job
+cd $PBS_O_WORKDIR
+
+setenv PATH ${HOME}/.miniconda3/envs/equinox/bin:${PATH}
+
+setenv OMP_NUM_THREADS 1
+setenv NUMEXPR_NUM_THREADS 1
+setenv MKL_NUM_THREADS 1
+setenv OPENBLAS_NUM_THREADS 1
+
+date
+
+python parcels_distributed.py
+
+date
