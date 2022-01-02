@@ -10,6 +10,7 @@ import geopandas as gpd
 from shapely.geometry import Polygon, Point
 from shapely import wkt
 import pyproj
+
 crs_wgs84 = pyproj.CRS("EPSG:4326")
 import pyinterp.geohash as geohash
 
@@ -98,16 +99,18 @@ def load_single_df_fromnc(npartitions=100, gps=None):
 
     return ds.to_dask_dataframe()
 
+
 # ---------------------------  lon/lat grid - geohash --------------------------
 
-def generate_grid_and_geohashes(dl,
-                                lat_bounds=(-80,80),
-                                geohash=False,
-                                plot=False,
-                                buffered=False,
-                                ):
-    """ Generate a regular lon/lat grid
-    """
+
+def generate_grid_and_geohashes(
+    dl,
+    lat_bounds=(-80, 80),
+    geohash=False,
+    plot=False,
+    buffered=False,
+):
+    """Generate a regular lon/lat grid"""
 
     # generate grid
     lon = np.arange(-180, 180, dl)
@@ -116,56 +119,60 @@ def generate_grid_and_geohashes(dl,
 
     # associated shapely objects and geopandas dataframe
     def get_poly(lon, lat, dlon, dlat):
-        return ((lon, lat),
-                (lon+dlon, lat),
-                (lon+dlon, lat+dlat),
-                (lon, lat+dlat), (lon, lat),
-                )
-    _polygons = [Polygon(get_poly(_lon,_lat, dl, dl))
-                 for _lon, _lat in zip(lon2.flatten(), lat2.flatten())]
+        return (
+            (lon, lat),
+            (lon + dlon, lat),
+            (lon + dlon, lat + dlat),
+            (lon, lat + dlat),
+            (lon, lat),
+        )
+
+    _polygons = [
+        Polygon(get_poly(_lon, _lat, dl, dl))
+        for _lon, _lat in zip(lon2.flatten(), lat2.flatten())
+    ]
     #
-    gdf = gpd.GeoDataFrame(
-        None, geometry=_polygons, crs=crs_wgs84
-    )
+    gdf = gpd.GeoDataFrame(None, geometry=_polygons, crs=crs_wgs84)
 
     # filter oceans out
     ocean = load_oceans(database="ne_110m_ocean")
 
     # select only boxes that are within ocean
-    gdf = gpd.sjoin(gdf, ocean, how='inner', op='intersects')
-    gdf = gdf.drop(columns=["index_right",
-                            "scalerank",
-                            "featurecla",
-                            "min_zoom",
-                           ])
+    gdf = gpd.sjoin(gdf, ocean, how="inner", op="intersects")
+    gdf = gdf.drop(
+        columns=[
+            "index_right",
+            "scalerank",
+            "featurecla",
+            "min_zoom",
+        ]
+    )
     if plot:
         gdf.plot()
 
     if geohash:
         if isinstance(geohash, int):
-            geohash_resolution=geohash
+            geohash_resolution = geohash
         else:
             # default resolution
-            geohash_resolution=2
+            geohash_resolution = 2
         hash_boxes = get_geohashes(geohash_resolution)
         if buffered:
             gdf_buff = gdf.copy()
-        gdf = (gpd
-               .sjoin(gdf, hash_boxes, how='left', op='intersects')
-               .rename(columns=dict(index_right="geohash"))
-               )
+        gdf = gpd.sjoin(gdf, hash_boxes, how="left", op="intersects").rename(
+            columns=dict(index_right="geohash")
+        )
 
     if not buffered:
         return gdf
 
     # buffer each polygons
-    gdf_buff['geometry'] = gdf_buff.buffer(dl)
+    gdf_buff["geometry"] = gdf_buff.buffer(dl)
 
     if geohash:
-        gdf_buff = (gpd
-                    .sjoin(gdf_buff, hash_boxes, how='left', op='intersects')
-                    .rename(columns=dict(index_right="geohash"))
-                     )
+        gdf_buff = gpd.sjoin(gdf_buff, hash_boxes, how="left", op="intersects").rename(
+            columns=dict(index_right="geohash")
+        )
 
     return gdf, gdf_buff
 
@@ -176,7 +183,7 @@ def get_geohashes(resolution):
     codes = geohash.bounding_boxes(None, precision=2)
 
     hash_boxes = gpd.GeoDataFrame(
-        {'geohash': codes},
+        {"geohash": codes},
         geometry=[wkt.loads(geohash.bounding_box(code).wkt()) for code in codes],
         crs=crs_wgs84,
     ).set_index("geohash")
@@ -318,7 +325,7 @@ def time_window_processing(
 
     """
     from pandas.api.types import is_datetime64_any_dtype as is_datetime
-    
+
     if hasattr(df, id_label):
         dr_id = df[id_label].unique()[0]
     elif df.index.name == id_label:
@@ -335,7 +342,7 @@ def time_window_processing(
     #
     # drop duplicated values
     df = df.drop_duplicates(subset="date")
-    #p = p.where(p.time.diff() != 0).dropna() # duplicates - old
+    # p = p.where(p.time.diff() != 0).dropna() # duplicates - old
     #
     df = df.sort_values("time")
     #
@@ -343,13 +350,13 @@ def time_window_processing(
         if isinstance(dt, float):
             # enforce regular sampling
             tmin, tmax = df.index[0], df.index[-1]
-            tmax = tmin+int((tmax-tmin)/dt)*dt
+            tmax = tmin + int((tmax - tmin) / dt) * dt
             regular_time = np.arange(tmin, tmax, dt)
             df = df.reindex(regular_time).interpolate()
         elif isinstance(dt, str):
             df = df.set_index("date").resample(dt).pad().reset_index()
             # by default converts to days then
-            dt = pd.Timedelta(dt)/pd.Timedelta('1D')
+            dt = pd.Timedelta(dt) / pd.Timedelta("1D")
         if geo:
             df = compute_lonlat(
                 df,
@@ -398,8 +405,8 @@ def mean_position(df, Lx=None):
     """
     # guess grid type
     dim_x, dim_y, geo = guess_spatial_dims(df)
-    #lon = next((c for c in df.columns if "lon" in c.lower()), None)
-    #lat = next((c for c in df.columns if "lat" in c.lower()), None)
+    # lon = next((c for c in df.columns if "lon" in c.lower()), None)
+    # lat = next((c for c in df.columns if "lat" in c.lower()), None)
     if geo:
         lon, lat = dim_x, dim_y
         if "v0" not in df:
@@ -463,11 +470,12 @@ def get_spectrum(v, N, dt=None, method="welch", detrend=False, **kwargs):
         _v = v.iloc[:N]
     if dt is None:
         dt = _v.reset_index()["index"].diff().mean()
-    
+
     if detrend and not method == "welch":
         print("!!! Not implemented yet except for welch")
     if method == "welch":
         from scipy import signal
+
         dkwargs = {
             "window": "hann",
             "return_onesided": False,
@@ -475,14 +483,16 @@ def get_spectrum(v, N, dt=None, method="welch", detrend=False, **kwargs):
             "scaling": "density",
         }
         dkwargs.update(kwargs)
-        f, E = signal.periodogram(_v, fs=1/dt, axis=0, **dkwargs)
+        f, E = signal.periodogram(_v, fs=1 / dt, axis=0, **dkwargs)
     elif method == "mtspec":
         from mtspec import mtspec
+
         lE, f = mtspec(
             data=_v, delta=dt, time_bandwidth=4.0, number_of_tapers=6, quadratic=True
         )
     elif method == "mt":
         import nitime.algorithms as tsa
+
         dkwargs = {"NW": 2, "sides": "twosided", "adaptive": False, "jackknife": False}
         dkwargs.update(kwargs)
         lf, E, nu = tsa.multi_taper_psd(_v, Fs=1 / dt, **dkwargs)
@@ -548,14 +558,10 @@ def compute_lonlat(
 def to_gdataframe(*args):
     if len(args) == 1:
         df = args[0]
-        return gpd.GeoDataFrame(
-            df, geometry=gpd.points_from_xy(df.LON, df.LAT)
-        )
+        return gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.LON, df.LAT))
     else:
         return [
-            gpd.GeoDataFrame(
-                df, geometry=gpd.points_from_xy(df.LON, df.LAT)
-            )
+            gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.LON, df.LAT))
             for df in args
         ]
 

@@ -35,15 +35,16 @@ from .utils import haversine
 
 # ------------------------------- dir tree management ------------------------------
 
+
 def create_dir_tree(root_dir, run_name, overwrite=False, verbose=True):
-    """ Create run directory tree based on a root_dir and run_name
+    """Create run directory tree based on a root_dir and run_name
 
     Parameters
     ----------
     root_dir: str
-        Root directory where 
-    
-    
+        Root directory where
+
+
     """
     run_root_dir = os.path.join(root_dir, run_name)
     _create_dir(run_root_dir, overwrite, verbose=verbose)
@@ -54,17 +55,19 @@ def create_dir_tree(root_dir, run_name, overwrite=False, verbose=True):
         _create_dir(dirs[sub_dir], overwrite, verbose=verbose)
     return dirs
 
+
 def _create_dir(directory, overwrite, verbose=True):
     if os.path.isdir(directory) and not overwrite:
         if verbose:
             print("Not overwriting {}".format(directory))
     else:
         shutil.rmtree(directory, ignore_errors=True)
-        os.mkdir(directory)    
+        os.mkdir(directory)
+
 
 # ------------------------------- llc tiling -------------------------------------
 
-#_mates = [
+# _mates = [
 #    ["maskW", "maskS"],
 #    ["TAUX", "TAUY"],
 #    ["SSU", "SSV"],
@@ -72,12 +75,13 @@ def _create_dir(directory, overwrite, verbose=True):
 #    ["dxG", "dyG"],
 #    ["hFacW", "hFacS"],
 #    ["rAw", "rAs"],
-#]
+# ]
 _mates = [
     ["SSU", "SSV"],
 ]
 
 crs_wgs84 = pyproj.CRS("EPSG:4326")
+
 
 def default_projection(lon, lat):
     # https://proj.org/operations/projections/laea.html
@@ -94,8 +98,8 @@ class tiler(object):
         name="tiling",
         N_extra=1000,
     ):
-        """ Object handling a custom overlapping horizontal tiling of global llc data
-        
+        """Object handling a custom overlapping horizontal tiling of global llc data
+
         Parameters
         ----------
         ds: xr.Dataset, optional
@@ -106,7 +110,7 @@ class tiler(object):
             Number of points that overlap over each domain
             Default is (500,500)
         tile_dir: str, optional
-            Path to an existing tile directory. 
+            Path to an existing tile directory.
             Load the tile object in if provided (and ds not provided)
         name: str
             Name of the tiling object
@@ -126,7 +130,7 @@ class tiler(object):
 
     def _build(self, ds, factor, overlap, N_extra, projection=None):
         """Actually generates the horizontal tiling
-        
+
         Parameters
         ----------
         ds: xarray.Dataset
@@ -158,17 +162,18 @@ class tiler(object):
         # store initial grid size
         # the size is the j dimension is decreases due to the necessity to shift the grid and
         # follow NEMO C-grid indices, see fuse_dimensions
-        global_domain_size = ds.i.size, ds.j.size-1
+        global_domain_size = ds.i.size, ds.j.size - 1
 
         # add N_extra points along longitude to allow wrapping around dateline
         ds_extra = ds.isel(i=slice(0, N_extra), i_g=slice(0, N_extra))
         for dim in ["i", "i_g"]:
             ds_extra[dim] = ds_extra[dim] + ds[dim][-1] + 1
         ds = xr.merge([xr.concat([ds[v], ds_extra[v]], ds[v].dims[-1]) for v in ds])
-        ds = (ds.reset_coords()[["XG", "YG"]]
-              .rename_dims(i_g="i", j_g="j")
-              .rename(i_g="i", j_g="j")
-             )
+        ds = (
+            ds.reset_coords()[["XG", "YG"]]
+            .rename_dims(i_g="i", j_g="j")
+            .rename(i_g="i", j_g="j")
+        )
 
         # start tiling
         tiles_1d, boundaries_1d = {}, {}
@@ -192,12 +197,10 @@ class tiler(object):
 
         # we need tile centers for geographic projections (dateline issues)
         centers = [
-            ds
-            .isel(
+            ds.isel(
                 i=[int((t[0].start + t[0].stop) / 2)],
                 j=[int((t[1].start + t[1].stop) / 2)],
-            )
-            .squeeze()
+            ).squeeze()
             for t in tiles
         ]
         centers = [
@@ -251,7 +254,7 @@ class tiler(object):
 
     def _load(self, tile_dir):
         """Load tiler from tile_dir
-        
+
         Parameters
         ----------
         tile_dir: str
@@ -259,11 +262,13 @@ class tiler(object):
         """
 
         # load various dict
-        ds = xr.open_dataset(os.path.join(tile_dir, "info.nc")) 
-        self.global_domain_size = (ds.attrs["global_domain_size_0"], 
-                                   ds.attrs["global_domain_size_1"])
+        ds = xr.open_dataset(os.path.join(tile_dir, "info.nc"))
+        self.global_domain_size = (
+            ds.attrs["global_domain_size_0"],
+            ds.attrs["global_domain_size_1"],
+        )
         self.N_tiles = ds.attrs["N_tiles"]
-        
+
         # regenerate projections
         self.CRS = list(map(pyproj.CRS, list(ds["crs_strings"].values)))
 
@@ -302,8 +307,7 @@ class tiler(object):
         self.G = G
 
     def store(self, tile_dir, create=True):
-        """Store tile to tile_dir
-        """
+        """Store tile to tile_dir"""
 
         _check_tile_directory(tile_dir, create)
 
@@ -311,15 +315,11 @@ class tiler(object):
         df_tiles = slices_to_dataframe(self.tiles)
         df_boundaries = slices_to_dataframe(self.boundaries)
         df = pd.concat(
-            [df_tiles.add_suffix("_tiles"),
-             df_boundaries.add_suffix("_boundaries")],
+            [df_tiles.add_suffix("_tiles"), df_boundaries.add_suffix("_boundaries")],
             axis=1,
         )
-        ds = (df
-              .to_xarray()
-              .rename(dict(index="tile"))
-             )
-        ds["crs_strings"]=("tile", self.crs_strings) # was list
+        ds = df.to_xarray().rename(dict(index="tile"))
+        ds["crs_strings"] = ("tile", self.crs_strings)  # was list
         ds.attrs["global_domain_size_0"] = self.global_domain_size[0]
         ds.attrs["global_domain_size_1"] = self.global_domain_size[1]
         ds.attrs["N_tiles"] = self.N_tiles
@@ -348,7 +348,7 @@ class tiler(object):
         tiles=None,
     ):
         """Assign data to tiles
-        
+
         Parameters
         ----------
         lon, lat: iterables, optional
@@ -374,7 +374,7 @@ class tiler(object):
             tiles = np.array(tiles)
 
         df = pd.DataFrame([gs.to_crs(self.CRS[t]).within(polygons[t]) for t in tiles]).T
-        
+
         # purpose of code below: Sylvie?
         dummy = [abs(-35.703821 - lon[i]) < 1.0e-5 for i in range(len(lon))]
         if any(dummy):
@@ -432,28 +432,29 @@ class tiler(object):
         if persist:
             ds = ds.persist()
         return ds
-    
+
     def create_tile_run_tree(self, run_dir, overwrite=False):
-        """ Create a tree of directory for the run
+        """Create a tree of directory for the run
         run_root_dir/run/data_000/ , ...
         """
-        dirs = {t: os.path.join(run_dir, "data_{:03d}".format(t))
-                for t in range(self.N_tiles)}
+        dirs = {
+            t: os.path.join(run_dir, "data_{:03d}".format(t))
+            for t in range(self.N_tiles)
+        }
         for t, tile_dir in dirs.items():
             _create_dir(tile_dir, overwrite)
         self.run_dirs = dirs
-        #return dirs
-        
+        # return dirs
+
     def clean_up(self, run_dir, step):
-        """ Clean up netcdf files older than step
-        """
+        """Clean up netcdf files older than step"""
         for t in range(self.N_tiles):
             ncfiles = glob(os.path.join(run_dir, "data_{:03d}/*.nc".format(t)))
             for f in ncfiles:
                 f_step = f.split("/")[-1].split("_")[1]
-                if int(f_step)>=step:
+                if int(f_step) >= step:
                     print("delete {}".format(f))
-                    os.remove(f)        
+                    os.remove(f)
 
 
 def tile_domain(N, factor, overlap, wrap=False):
@@ -582,16 +583,11 @@ def generate_randomly_located_data(lon=(0, 180), lat=(0, 90), N=1000):
 
 
 def tile_store_llc(ds, time_slice, tl, persist=False, netcdf=False):
-    """ Process llc dataset and extract tile only relevant data
-    """
+    """Process llc dataset and extract tile only relevant data"""
     # extract time slice for dt_window
-    coords = ["XG", "YG", "Depth"] # "XC", "YC",
+    coords = ["XG", "YG", "Depth"]  # "XC", "YC",
     variables = ["SSU", "SSV", "Eta", "SST", "SSS"]
-    ds_tsubset = (ds
-                  .sel(time=time_slice)
-                  .reset_coords()
-                  [coords+variables]
-                 )
+    ds_tsubset = ds.sel(time=time_slice).reset_coords()[coords + variables]
     # convert faces structure to global lat/lon structure
     if "face" in ds_tsubset.dims:
         # pair vector variables
@@ -599,14 +595,12 @@ def tile_store_llc(ds, time_slice, tl, persist=False, netcdf=False):
             if m[0] in ds:
                 ds_tsubset[m[0]].attrs["mate"] = m[1]
                 ds_tsubset[m[1]].attrs["mate"] = m[0]
-        ds_tsubset = (llc.faces_dataset_to_latlon(ds_tsubset, metric_vector_pairs=[])
-                      .drop("face")
-                     )
-    
+        ds_tsubset = llc.faces_dataset_to_latlon(
+            ds_tsubset, metric_vector_pairs=[]
+        ).drop("face")
+
     # add N_extra points along longitude to allow wrapping around dateline
-    ds_extra = ds_tsubset.isel(i=slice(0, tl.N_extra), 
-                               i_g=slice(0, tl.N_extra)
-                              )
+    ds_extra = ds_tsubset.isel(i=slice(0, tl.N_extra), i_g=slice(0, tl.N_extra))
     for dim in ["i", "i_g"]:
         ds_extra[dim] = ds_extra[dim] + ds_tsubset[dim][-1] + 1
     ds_tsubset = xr.merge(
@@ -625,7 +619,7 @@ def tile_store_llc(ds, time_slice, tl, persist=False, netcdf=False):
     D = tl.tile(ds_tsubset, persist=persist)
 
     ds_tiles = []
-    #for tile, ds_tile in enumerate(tqdm(D)):
+    # for tile, ds_tile in enumerate(tqdm(D)):
     for tile, ds_tile in enumerate(D):
         if netcdf:
             nc_file = os.path.join(tl.run_dirs[tile], "llc.nc")
@@ -664,7 +658,6 @@ def fuse_dimensions(ds, shift=True):
 
 # should create a class with code below
 class run(object):
-    
     def __init__(
         self,
         tile,
@@ -683,7 +676,7 @@ class run(object):
     ):
 
         self.empty = True
-                
+
         self.tile = tile
         self.tl = tl
         self.run_dir = tl.run_dirs[tile]
@@ -693,21 +686,21 @@ class run(object):
 
         self.starttime = starttime
         self.endtime = endtime
-        
+
         self.dt_step = dt_step
         self.dt_window = dt_window
         self.dt_out = dt_out
-                
+
         self.id_max = id_max
-        
+
         self.verbose = verbose
 
-        if self.verbose>0:
+        if self.verbose > 0:
             print("starttime =", starttime)
             print("endtime =", endtime)
             print("dt_window =", dt_window)
             print("dt_step =", dt_step)
-                
+
         # load fieldset
         self.init_field_set(ds, netcdf)
         # step_window would call such object
@@ -737,15 +730,17 @@ class run(object):
             "V": _standard_dims,
         }
         #    "waterdepth": {"lon": "XC", "lat": "YC"},
-        if self.pclass=="extended":
-            variables.update({"sea_level": "Eta",
-                             "temperature": "SST",
-                             "salinity": "SSS"}
-                            )
-            dims.update({"sea_level": _standard_dims,
-                         "temperature": _standard_dims,
-                         "salinity": _standard_dims,
-                        })
+        if self.pclass == "extended":
+            variables.update(
+                {"sea_level": "Eta", "temperature": "SST", "salinity": "SSS"}
+            )
+            dims.update(
+                {
+                    "sea_level": _standard_dims,
+                    "temperature": _standard_dims,
+                    "salinity": _standard_dims,
+                }
+            )
         if netcdf:
             fieldset = FieldSet.from_netcdf(
                 netcdf,
@@ -754,7 +749,7 @@ class run(object):
                 interp_method="cgrid_velocity",
             )
         else:
-            #ds = ds.compute() # test to see if it decreases memory usage, nope
+            # ds = ds.compute() # test to see if it decreases memory usage, nope
             fieldset = FieldSet.from_xarray_dataset(
                 ds,
                 variables=variables,
@@ -796,7 +791,9 @@ class run(object):
         # offset parcel id"s such as to make sure they do not overlap
         if pset is not None:
             if pset.size > 0:
-                pset.collection.data["id"] = pset.collection.data["id"] + int(tile * 1e6)           
+                pset.collection.data["id"] = pset.collection.data["id"] + int(
+                    tile * 1e6
+                )
             # initial value of id_max
             self.id_max = max(pset.collection.data["id"])
             self.empty = False
@@ -808,22 +805,22 @@ class run(object):
     def init_particles_restart(self, seed=False):
         """Reload data from previous runs"""
         tile, tl, fieldset = self.tile, self.tl, self.fieldset
-        
+
         # load parcel file from previous runs
         self.particle_class.setLastID(0)
         pset = ParticleSet(fieldset=self.fieldset, pclass=self.particle_class)
         for _tile in range(tl.N_tiles):
             ncfile = self.nc(step=self.step - 1, tile=_tile)
             if os.path.isfile(ncfile):
-                #particle_class = _get_particle_class(self.pclass)
+                # particle_class = _get_particle_class(self.pclass)
                 particle_class = self.particle_class
-                #particle_class.setLastID(0)
+                # particle_class.setLastID(0)
                 _pset = ParticleSet.from_particlefile(
                     fieldset,
                     particle_class,
                     ncfile,
                     restart=True,
-                    restarttime = np.datetime64(self.starttime),
+                    restarttime=np.datetime64(self.starttime),
                 )
                 df = pd.read_csv(self.csv(step=self.step - 1, tile=_tile), index_col=0)
                 df_not_in_tile = df.loc[df["tile"] != tile]
@@ -844,16 +841,22 @@ class run(object):
             # load initial parcel position for this tile and compute parcel separation
             ds = xr.open_dataset(ncfile).isel(obs=0)
             lon_init, lat_init = ds.lon.values, ds.lat.values
-            separation_init = [nsmallest(2, haversine(lon, lat, lon_init, lat_init))[1] 
-                               for lon, lat in zip(lon_init, lat_init)
-                              ]
-            lon_last, lat_last = pset.collection.data["lon"], pset.collection.data["lat"]
-            seed_positions = [(lon, lat) for lon, lat, s_init in 
-                              zip(lon_init, lat_init, separation_init) 
-                              if ((lon_last.size==0)
-                                  or min(haversine(lon, lat, lon_last, lat_last))>s_init
-                                 )
-                             ]
+            separation_init = [
+                nsmallest(2, haversine(lon, lat, lon_init, lat_init))[1]
+                for lon, lat in zip(lon_init, lat_init)
+            ]
+            lon_last, lat_last = (
+                pset.collection.data["lon"],
+                pset.collection.data["lat"],
+            )
+            seed_positions = [
+                (lon, lat)
+                for lon, lat, s_init in zip(lon_init, lat_init, separation_init)
+                if (
+                    (lon_last.size == 0)
+                    or min(haversine(lon, lat, lon_last, lat_last)) > s_init
+                )
+            ]
             if seed_positions:
                 self.particle_class.setLastID(0)
                 lon, lat = list(zip(*seed_positions))
@@ -864,37 +867,40 @@ class run(object):
                     lat=lat,
                 )
                 # update index to prevent any overlap
-                _pset.collection.data["id"] = _pset.collection.data["id"] + 1 + self.id_max
+                _pset.collection.data["id"] = (
+                    _pset.collection.data["id"] + 1 + self.id_max
+                )
                 self.id_max = max(_pset.collection.data["id"])
                 pset.add(_pset)
-        
-        if pset.size>0:
-            self.empty=False
-        
+
+        if pset.size > 0:
+            self.empty = False
+
         self.pset = pset
-        
+
     def execute(self, advection=None, cleanup=True):
 
         if self.empty:
             return
-        
+
         pset = self.pset
-                
+
         if advection == "euler":
             adv = AdvectionEE
         else:
             adv = AdvectionRK4
-        if self.pclass=="extended":
+        if self.pclass == "extended":
             kernel = Extended_Sample + pset.Kernel(adv)
         else:
             kernel = adv
-        
+
         # if pset.size>0:
         if pset is not None:
             if pset.size > 0:
-                file_out = pset.ParticleFile(self.nc(), 
-                                             outputdt=self.dt_out,
-                                            )
+                file_out = pset.ParticleFile(
+                    self.nc(),
+                    outputdt=self.dt_out,
+                )
                 pset.execute(
                     pyfunc=kernel,
                     endtime=self.endtime,
@@ -904,7 +910,7 @@ class run(object):
                     postIterationCallbacks=[self.store_to_csv, _clean_memory],
                     callbackdt=self.dt_window,
                 )
-                # could add garbage collection in postIterationCallbacks, 
+                # could add garbage collection in postIterationCallbacks,
                 # see: https://github.com/OceanParcels/parcels/issues/607
 
                 # force converting temporary npy directory to netcdf file
@@ -940,10 +946,10 @@ class run(object):
             float_tiles["id"] = self["id"]
             float_tiles = float_tiles.drop_duplicates(subset=["id"])
             float_tiles.to_csv(self.csv())
-            
+
     def close(self):
         del self.pset
-        
+
 
 def _get_particle_class(pclass):
     # if pclass=="llc":
@@ -956,6 +962,7 @@ def _get_particle_class(pclass):
     elif pclass == "extended":
         return Particle_extended
 
+
 class Particle_extended(JITParticle):
     zonal_velocity = Variable("zonal_velocity", dtype=np.float32)
     meridional_velocity = Variable("meridional_velocity", dtype=np.float32)
@@ -963,22 +970,33 @@ class Particle_extended(JITParticle):
     sea_level = Variable("sea_level", dtype=np.float32)
     temperature = Variable("temperature", dtype=np.float32)
     salinity = Variable("salinity", dtype=np.float32)
-    
+
+
 def Extended_Sample(particle, fieldset, time):
-    particle.zonal_velocity, particle.meridional_velocity = fieldset.UV[time, particle.depth, particle.lat, particle.lon]
-    #particle.zonal_velocity = fieldset.U[time, particle.depth, particle.lat, particle.lon]
-    #particle.meridional_velocity = fieldset.V[time, particle.depth, particle.lat, particle.lon]
+    particle.zonal_velocity, particle.meridional_velocity = fieldset.UV[
+        time, particle.depth, particle.lat, particle.lon
+    ]
+    # particle.zonal_velocity = fieldset.U[time, particle.depth, particle.lat, particle.lon]
+    # particle.meridional_velocity = fieldset.V[time, particle.depth, particle.lat, particle.lon]
     #
-    particle.sea_level = fieldset.sea_level[time, particle.depth, particle.lat, particle.lon]
-    particle.temperature = fieldset.temperature[time, particle.depth, particle.lat, particle.lon]
-    particle.salinity = fieldset.salinity[time, particle.depth, particle.lat, particle.lon]
+    particle.sea_level = fieldset.sea_level[
+        time, particle.depth, particle.lat, particle.lon
+    ]
+    particle.temperature = fieldset.temperature[
+        time, particle.depth, particle.lat, particle.lon
+    ]
+    particle.salinity = fieldset.salinity[
+        time, particle.depth, particle.lat, particle.lon
+    ]
+
 
 # Make sure to remove the floats that start on land
 def DeleteParticle(particle, fieldset, time):
     particle.delete()
 
+
 def RemoveOnLand(particle, fieldset, time):
-    """ Implements the removal of particle when they are on land
+    """Implements the removal of particle when they are on land
     according to criteria based on velocity amplitude
     """
     u, v = fieldset.UV[time, particle.depth, particle.lat, particle.lon]
@@ -987,10 +1005,12 @@ def RemoveOnLand(particle, fieldset, time):
     # if math.fabs(particle.depth) < 500:
     if math.fabs(u) < 1e-12 and math.fabs(v) < 1e-12:
         particle.delete()
-        
+
+
 def _clean_memory():
     gc.collect()
-        
+
+
 def step_window(
     tile,
     step,
@@ -1010,7 +1030,7 @@ def step_window(
     debug=0,
 ):
     """Timestep parcels within one tile (tile) and one time window (step)
-    
+
     Parameters:
     -----------
         tile: int
@@ -1026,7 +1046,7 @@ def step_window(
         dt_step:
         dt_out:
         tl: mitequinox.parcels.tiler
-            Tile object            
+            Tile object
         ds_tile: list of xarray.Dataset
             tiled llc data
         init_dij: int, optional
@@ -1036,7 +1056,7 @@ def step_window(
         seed:
         verbose: int, optional
         debug: int, optional
-    
+
     """
 
     # https://docs.dask.org/en/latest/scheduling.html
@@ -1052,15 +1072,21 @@ def step_window(
             ds = xr.open_dataset(llc, chunks={"time": 1})
 
         # init run object
-        prun = run(tile, tl, ds, 
-                   step,
-                   start_time, end_time, dt_window,
-                   dt_step, dt_out,
-                   id_max=id_max,
-                   verbose=verbose,
-                   pclass=pclass,
-                  )
-        if debug==1:
+        prun = run(
+            tile,
+            tl,
+            ds,
+            step,
+            start_time,
+            end_time,
+            dt_window,
+            dt_step,
+            dt_out,
+            id_max=id_max,
+            verbose=verbose,
+            pclass=pclass,
+        )
+        if debug == 1:
             return prun, ds
 
         # load drifter positions
@@ -1068,7 +1094,7 @@ def step_window(
             prun.init_particles(ds, init_dij)
         else:
             prun.init_particles_restart(seed)
-        if debug==2:
+        if debug == 2:
             return prun
 
         # if parcels_remove_on_land and prun.pset.size>0:
@@ -1080,7 +1106,7 @@ def step_window(
                     recovery={ErrorCode.ErrorOutOfBounds: DeleteParticle},
                 )
         # 2.88 s for 10x10 tiles and dij=10
-        if debug==3:
+        if debug == 3:
             return prun
 
         # perform the parcels simulation
@@ -1088,45 +1114,48 @@ def step_window(
 
         # extract useful information
         if prun.empty:
-            parcel_number=0
+            parcel_number = 0
         else:
             parcel_number = prun.pset.collection.data["id"].size
         id_max = prun.id_max
-        
+
         # clean up
         prun.close()
-            
+
         return parcel_number, id_max
 
+
 def step_window_except(*args, **kwargs):
-    """ wraps step_window to catch exceptions
-    """
+    """wraps step_window to catch exceptions"""
     _kwargs = dict(**kwargs)
     try:
         return step_window(*args, **_kwargs)
     except:
         e = sys.exc_info()[0]
-        #except AssertionError as e:
+        # except AssertionError as e:
         return ("error in tile {}".format(args[0]), e)
+
 
 # delays step window fro distribution
 step_window_delayed = delayed(step_window_except)
 
+
 def name_log_file(run_dir):
-    """ Generate an adequate name for a log file labelled
+    """Generate an adequate name for a log file labelled
     with the time of execution
-    
+
     Parameters
     ----------
     run_dir
     """
     now = datetime.now().strftime("%Y%m%d_%H%M")
-    return os.path.join(run_dir, "log_"+now+".yaml")
+    return os.path.join(run_dir, "log_" + now + ".yaml")
+
 
 def store_log(log_file, step, data):
-    """ Append log data to log file of a particular window step (// parcel atomic run)
+    """Append log data to log file of a particular window step (// parcel atomic run)
     Create a file if non-existent
-    
+
     Parameters
     ----------
         log_file: str
@@ -1136,25 +1165,27 @@ def store_log(log_file, step, data):
             log data to be stored
     """
     if os.path.isfile(log_file):
-        with open(log_file,"r") as yamlfile:
+        with open(log_file, "r") as yamlfile:
             cur_yaml = yaml.safe_load(yamlfile)
         cur_yaml.update({step: data})
     else:
         cur_yaml = {step: data}
-    with open(log_file,"w") as yamlfile:
+    with open(log_file, "w") as yamlfile:
         yaml.safe_dump(cur_yaml, yamlfile)
+
 
 def browse_log_files(run_dir):
     log_files = sorted(glob(os.path.join(run_dir, "log_*yaml")))
     log = {}
     if log_files:
         for f in log_files:
-            with open(f,"r") as yamlfile:
+            with open(f, "r") as yamlfile:
                 log.update(yaml.safe_load(yamlfile))
     return log
 
+
 def load_logs(root_dir, run_name):
-    """ Browse run and load basic information (global float number, etc ...)
+    """Browse run and load basic information (global float number, etc ...)
 
     Parameters
     ----------
@@ -1163,31 +1194,31 @@ def load_logs(root_dir, run_name):
     run_name: str
         name of run
     """
-    dirs = create_dir_tree(root_dir, run_name, 
-                           overwrite=False, verbose=False
-                          )
+    dirs = create_dir_tree(root_dir, run_name, overwrite=False, verbose=False)
     tl = tiler(tile_dir=dirs["tiling"])
     log = browse_log_files(dirs["run"])
     steps = list(log)
     # massage data
-    da0 = xr.DataArray([d["global_parcel_number"] for step, d in log.items()], 
-                   dims="step", name="global_parcel_number"
-                  ).assign_coords(step=steps)
+    da0 = xr.DataArray(
+        [d["global_parcel_number"] for step, d in log.items()],
+        dims="step",
+        name="global_parcel_number",
+    ).assign_coords(step=steps)
     #
     _D = []
     for step, d in log.items():
-        _D.append(xr.DataArray(list(d["max_ids"].values()), 
-                               dims="tile", 
-                               name="id_max"),
-                 )
+        _D.append(
+            xr.DataArray(list(d["max_ids"].values()), dims="tile", name="id_max"),
+        )
     da1 = xr.concat(_D, "step").assign_coords(step=steps)
     #
     _D = []
     for step, d in log.items():
-        _D.append(xr.DataArray(list(d["local_numbers"].values()), 
-                               dims="tile",
-                               name="local_numbers"),
-                 )
+        _D.append(
+            xr.DataArray(
+                list(d["local_numbers"].values()), dims="tile", name="local_numbers"
+            ),
+        )
     da2 = xr.concat(_D, "step").assign_coords(step=steps)
     #
     ds = xr.merge([da0, da1, da2])
@@ -1310,9 +1341,9 @@ def store_parquet(
     # repartition such that each partition is 100MB big
     if partition_size is not None:
         df = df.repartition(partition_size=partition_size)
-    
+
     df.to_parquet(parquet_path, engine=engine, compression=compression)
-    
+
     return parquet_path
 
 
@@ -1341,15 +1372,14 @@ def load_parquet(
 
 
 class parcels_output(object):
-    
-    def __init__(self, 
-                 run_dir, 
-                 parquets=None,
-                 persist=False,
-                 parquet_kwargs=None,
-                ):
-        """ Load parcels distributed run
-        """
+    def __init__(
+        self,
+        run_dir,
+        parquets=None,
+        persist=False,
+        parquet_kwargs=None,
+    ):
+        """Load parcels distributed run"""
         self.run_dir = run_dir
         # explore tree and load relevant data
         tile_dir = os.path.join(run_dir, "tiling/")
@@ -1357,10 +1387,12 @@ class parcels_output(object):
             self.tiler = tiler(tile_dir=tile_dir)
         self.parquet_dir = os.path.join(run_dir, "parquets/")
         if os.path.isdir(self.parquet_dir):
-            parquet_paths = glob(self.parquet_dir+"*")
+            parquet_paths = glob(self.parquet_dir + "*")
             self.parquets = {p.split("/")[-1]: p for p in parquet_paths}
         else:
-            print("Not parquet files found, may need to produce them, see parcel_distributed.ipynb")
+            print(
+                "Not parquet files found, may need to produce them, see parcel_distributed.ipynb"
+            )
         self.df = {}
         if parquets is not None:
             for p in parquets:
@@ -1377,15 +1409,13 @@ class parcels_output(object):
 
     def __getitem__(self, item):
         return self.df[item]
-        
+
     ### store/load diagnostics
-    def store_diagnostic(self, name, data, 
-                         overwrite=False,
-                         directory="diagnostics/",
-                         **kwargs
-                        ):
-        """ Write diagnostics to disk
-        
+    def store_diagnostic(
+        self, name, data, overwrite=False, directory="diagnostics/", **kwargs
+    ):
+        """Write diagnostics to disk
+
         Parameters
         ----------
         name: str
@@ -1401,36 +1431,29 @@ class parcels_output(object):
             Any keyword arguments that will be passed to the file writer
         """
         # create diagnostics dir if not present
-        _dir = _check_diagnostic_directory(directory, 
-                                           self.run_dir, 
-                                           create=True,
-                                          )
+        _dir = _check_diagnostic_directory(
+            directory,
+            self.run_dir,
+            create=True,
+        )
         #
         if isinstance(data, dd.DataFrame):
             # store to parquet
-            store_parquet(_dir, 
-                          data,
-                          overwrite=overwrite,
-                          name=name,
-                          **kwargs
-                         )
+            store_parquet(_dir, data, overwrite=overwrite, name=name, **kwargs)
         if isinstance(data, xr.Dataset):
             # store to zarr format
-            zarr_path = os.path.join(_dir,name+".zarr")
+            zarr_path = os.path.join(_dir, name + ".zarr")
             write_kwargs = dict(kwargs)
             if overwrite:
                 write_kwargs.update({"mode": "w"})
             data = _move_singletons_as_attrs(data)
             data = _reset_chunk_encoding(data)
-            data.to_zarr(zarr_path, **write_kwargs)            
+            data.to_zarr(zarr_path, **write_kwargs)
             print("{} diagnostics stored in {}".format(name, zarr_path))
 
-    def load_diagnostic(self, name, 
-                        directory="diagnostics/",
-                        persist=False,
-                        **kwargs):
-        """ Load diagnostics from disk
-        
+    def load_diagnostic(self, name, directory="diagnostics/", persist=False, **kwargs):
+        """Load diagnostics from disk
+
         Parameters
         ----------
         name: str, list
@@ -1453,15 +1476,13 @@ class parcels_output(object):
                 data = xr.open_zarr(data_path, **kwargs)
             if persist:
                 data = data.persist()
-            return data  
+            return data
         else:
             print("{} does not exist".parquet_path)
-  
-                
-def _check_diagnostic_directory(directory, dirname, 
-                                create=False):
-    """ Check existence of a directory and create it if necessary
-    """
+
+
+def _check_diagnostic_directory(directory, dirname, create=False):
+    """Check existence of a directory and create it if necessary"""
     # create diagnostics dir if not present
     if os.path.isdir(directory):
         # directory is an absolute path
@@ -1477,24 +1498,30 @@ def _check_diagnostic_directory(directory, dirname,
             print("Create new diagnostic directory {}".format(_dir))
         else:
             raise OSError("Directory does not exist")
-    return _dir                
-                
+    return _dir
+
+
 def _move_singletons_as_attrs(ds, ignore=[]):
-    """ change singleton variables and coords to attrs
+    """change singleton variables and coords to attrs
     This seems to be required for zarr archiving
     """
-    for c,co in ds.coords.items():
-        if co.size==1 and ( len(co.dims)==1 and co.dims[0] not in ignore or len(co.dims)==0 ):
+    for c, co in ds.coords.items():
+        if co.size == 1 and (
+            len(co.dims) == 1 and co.dims[0] not in ignore or len(co.dims) == 0
+        ):
             ds = ds.drop_vars(c).assign_attrs({c: ds[c].values})
     for v in ds.data_vars:
-        if ds[v].size==1 and ( len(v.dims)==1 and v.dims[0] not in ignore or len(v.dims)==0 ):
+        if ds[v].size == 1 and (
+            len(v.dims) == 1 and v.dims[0] not in ignore or len(v.dims) == 0
+        ):
             ds = ds.drop_vars(v).assign_attrs({v: ds[v].values})
     return ds
 
+
 def _reset_chunk_encoding(ds):
-    """ Delete chunks from variables encoding. 
+    """Delete chunks from variables encoding.
     This may be required when loading zarr data and rewriting it with different chunks
-    
+
     Parameters
     ----------
     ds: xr.DataArray, xr.Dataset
@@ -1511,24 +1538,27 @@ def _reset_chunk_encoding(ds):
             del ds[v].encoding["chunks"]
     return ds
 
+
 # ------------------------------ plotting------------------------------------------
 
-def plot_llc_parcels(t_start, 
-                     t_end,
-                     t_delta="1H",
-                     parquet_dir=None,
-                     trail=None,
-                     flag_drifters=0,
-                     drifter_kwargs=None,
-                     background=None,
-                     fig_suffix=None, 
-                     fig_dir=None,
-                     overwrite=True,
-                     offline=True,
-                     **kwargs
-                    ):
-    """ generates plots with drifter tracks and background llc data
-    
+
+def plot_llc_parcels(
+    t_start,
+    t_end,
+    t_delta="1H",
+    parquet_dir=None,
+    trail=None,
+    flag_drifters=0,
+    drifter_kwargs=None,
+    background=None,
+    fig_suffix=None,
+    fig_dir=None,
+    overwrite=True,
+    offline=True,
+    **kwargs,
+):
+    """generates plots with drifter tracks and background llc data
+
     Parameters
     ----------
     t_start: str, pd.Timestamp
@@ -1558,24 +1588,28 @@ def plot_llc_parcels(t_start,
         if False figures are produced locally (debug)
     """
     import cartopy.crs as ccrs
-    
+
     if offline:
         import dask
-        dask.config.set(scheduler="threads")  # overwrite default with threaded scheduler
-    
+
+        dask.config.set(
+            scheduler="threads"
+        )  # overwrite default with threaded scheduler
+
     if trail is None:
         trail = pd.Timedelta(0)
     elif isinstance(trail, str):
         trail = pd.Timedelta(trail)
-        
-    bg_kwargs = {"v": "SST",
-                 "dij": 8,
-                 "vmin": -2.5,
-                 "vmax": 32.5,
-                 "gridlines": False,
-                 "figsize": (15,6),
-                 "region": "global",
-                }
+
+    bg_kwargs = {
+        "v": "SST",
+        "dij": 8,
+        "vmin": -2.5,
+        "vmax": 32.5,
+        "gridlines": False,
+        "figsize": (15, 6),
+        "region": "global",
+    }
     if isinstance(background, dict):
         bg_kwargs.update(background)
     bg_v = bg_kwargs["v"]
@@ -1583,18 +1617,19 @@ def plot_llc_parcels(t_start,
         bg_zarr = bg_kwargs["zarr"]
     else:
         bg_zarr = None
-    
+
     if fig_dir is None:
-        fig_dir = os.environ["SCRATCH"]+"/figs/"
+        fig_dir = os.environ["SCRATCH"] + "/figs/"
     if fig_suffix is None:
         fig_suffix = ""
-    
+
     t_range = pd.date_range(t_start, t_end, freq=t_delta)
 
     # llc
     if background:
         if bg_zarr is None:
             from .utils import load_llc
+
             if bg_v in ["SSU", "SSV"]:
                 llc = load_llc(["SSU", "SSV"], bg_kwargs["dij"], t_start, t_end)
             else:
@@ -1604,53 +1639,56 @@ def plot_llc_parcels(t_start,
 
     if bg_v in ["SSU", "SSV"]:
         from .utils import rotate
+
         u, v = rotate(llc.SSU, llc.SSV, llc)
-    if bg_v=="SSU":
+    if bg_v == "SSU":
         llc = u.rename("SSU").to_dataset()
-    elif bg_v=="SSV":
+    elif bg_v == "SSV":
         llc = v.rename("SSV").to_dataset()
-    
+
     # drifters
     if parquet_dir is None:
         parquet_dir = p.parquets["time"]
-        #parquet_dir = "/home1/datawork/aponte/parcels/global_extra_T365j_dt1j_dij50/parquets/time"
+        # parquet_dir = "/home1/datawork/aponte/parcels/global_extra_T365j_dt1j_dij50/parquets/time"
     df = dd.read_parquet(parquet_dir)
-    df = df.loc[(df.index>=t_start-trail)&(df.index<=t_end)].compute()
+    df = df.loc[(df.index >= t_start - trail) & (df.index <= t_end)].compute()
 
     _drifter_kwargs = dict(transform=ccrs.PlateCarree())
     _drifter_kwargs.update(drifter_kwargs)
-    
+
     #
     from .plot import plot_pretty
     import threading
+
     MPL_LOCK = threading.Lock()
     with MPL_LOCK:
         if offline:
             plt.switch_backend("agg")
-    
+
         for t in t_range:
-            
+
             date = t.strftime("%Y-%m-%d_%HH")
-            figname = fig_dir+fig_suffix+date+".png"
-            
+            figname = fig_dir + fig_suffix + date + ".png"
+
             if overwrite or not os.path.isfile(figname) or not offline:
 
                 if background:
-                    bg_kwargs["v"] = llc[bg_v].sel(time=t) #.compute()
+                    bg_kwargs["v"] = llc[bg_v].sel(time=t)  # .compute()
                     d = plot_pretty(**bg_kwargs)
                     fig, ax = d["fig"], d["ax"]
                     if not offline:
                         print("background printed")
                 else:
-                    fig = plt.figure(figsize=(15,6))
+                    fig = plt.figure(figsize=(15, 6))
                     ax = fig.add_subplot(111, projection=ccrs.PlateCarree())
-                
+
                 if trail:
                     # show trailing positions
-                    _df = df.loc[(df.index>t-trail)&(df.index<=t)]
-                    (_df
-                     .groupby("trajectory")
-                     .apply(plot_trajectory, ax=ax, **_drifter_kwargs)
+                    _df = df.loc[(df.index > t - trail) & (df.index <= t)]
+                    (
+                        _df.groupby("trajectory").apply(
+                            plot_trajectory, ax=ax, **_drifter_kwargs
+                        )
                     )
                 else:
                     # do not show trailing positions
@@ -1662,82 +1700,92 @@ def plot_llc_parcels(t_start,
                 ax.set_title(date)
 
                 if offline:
-                    fig.savefig(figname, dpi=150, bbox_inches = "tight")
+                    fig.savefig(figname, dpi=150, bbox_inches="tight")
                     plt.close(fig)
-                      
-def plot_trajectory(df, 
-                    ax=None, 
-                    flag_drifters=0,
-                    **kwargs,
-                   ):
-    """ plot single drifter trajectory
-    
+
+
+def plot_trajectory(
+    df,
+    ax=None,
+    flag_drifters=0,
+    **kwargs,
+):
+    """plot single drifter trajectory
+
     Parameters
     ----------
     df: pandas.Dataframe
     ax: pyplot axis, optional
     flag_drifters: int, optional
-        used to distinguish drifters 
+        used to distinguish drifters
     **kwargs: optional
         options for plot method
     """
     df = df.sort_index()
     dr_id = int(df["trajectory"].unique()[0])
-    if flag_drifters==1:
+    if flag_drifters == 1:
         # skips drifter not initially deployed, this should be done outside plot_trajectory
         if dr_id in id_t0:
-            color="k"
+            color = "k"
         else:
             return
-    elif flag_drifters==2:
+    elif flag_drifters == 2:
         # disinguish with colors both types of drifters
         if dr_id in id_t0:
-            color="k"
+            color = "k"
         else:
-            color="0.8"
+            color = "0.8"
     else:
-        color="k"
+        color = "k"
     dkwargs = dict(ms=1, color=color)
     dkwargs.update(kwargs)
     if ax is None:
         ax = plt
     ax.plot(df.lon, df.lat, **dkwargs)
 
-def filter_drifters_regionally(df, extent, 
-                               t_range=None, 
-                               region_name=None,
-                               parquet_dir=None, 
-                               overwrite=True,
-                              ):
-    """ Filter data within a box of longitudes and latitudes and store data
-    """
+
+def filter_drifters_regionally(
+    df,
+    extent,
+    t_range=None,
+    region_name=None,
+    parquet_dir=None,
+    overwrite=True,
+):
+    """Filter data within a box of longitudes and latitudes and store data"""
     # get id of drifter that goes through the region
-    df = df[ (df.lon>extent[0])
-            &(df.lon<extent[1])
-            &(df.lat>extent[2])
-            &(df.lat<extent[3])
-           ]
+    df = df[
+        (df.lon > extent[0])
+        & (df.lon < extent[1])
+        & (df.lat > extent[2])
+        & (df.lat < extent[3])
+    ]
     dr_id = list(df["trajectory"].drop_duplicates().compute())
-    df = df[ df.trajectory.isin(dr_id) ]
-    
+    df = df[df.trajectory.isin(dr_id)]
+
     # could also filter on time
     if t_range is not None:
         if isinstance(t_range, pd.Index):
-            t_range = tuple(t_range[[0,-1]])
-        df = df.loc[ (df.index>=t_range[0]-pd.Timedelta("5D")) & (df.index<=t_range[1])]
-    
+            t_range = tuple(t_range[[0, -1]])
+        df = df.loc[
+            (df.index >= t_range[0] - pd.Timedelta("5D")) & (df.index <= t_range[1])
+        ]
+
     # store
     if parquet_dir is None:
         from .utils import scratch
+
         parquet_dir = scratch
     name = "zoom_drifters"
     if region_name is not None:
-        name = name.replace("_","_"+region_name+"_")
+        name = name.replace("_", "_" + region_name + "_")
     parquet_path = store_parquet(parquet_dir, df, name=name, overwrite=overwrite)
-    
+
     return parquet_path
-        
+
+
 # ------------------------------ h3 relative ---------------------------------------
+
 
 def h3_index(df, resolution=2):
     """
@@ -1797,39 +1845,43 @@ def plot_h3_simple(
     plt.xticks([], [])
     plt.yticks([], [])
 
-    
 
 # ------------------------------ unit converters ---------------------------------------
 
-def degs2ms(df,lat="lat"):
+
+def degs2ms(df, lat="lat"):
     """
     Convert velocity in degree per second in meter per second.
     See parcels code :
     https://github.com/OceanParcels/parcels/blob/6c83aa0acfe74f89bb8ce7a01de6357329d488d4/parcels/tools/converters.py
-    
+
     Parameters:
     ----------
     df : dask dataframe in which the velcoity are in degree per second
     lat : name of the column corresponding to latitude, defaults is "lat"
-    """     
-    df["zonal_velocity"] = df["zonal_velocity"]* 1000. * 1.852 * 60. * np.cos(df[lat] * np.pi / 180)
-    df["meridional_velocity"] = df["meridional_velocity"] * 1000. * 1.852 * 60.
+    """
+    df["zonal_velocity"] = (
+        df["zonal_velocity"] * 1000.0 * 1.852 * 60.0 * np.cos(df[lat] * np.pi / 180)
+    )
+    df["meridional_velocity"] = df["meridional_velocity"] * 1000.0 * 1.852 * 60.0
     return df
 
+
 # ------------------------------ geographical coordinates ---------------------------------------
+
 
 def add_geodata(df):
 
     df["lon"] = df.apply(lambda r: r.name[0].mid, axis=1)
     df["lat"] = df.apply(lambda r: r.name[1].mid, axis=1)
 
-#    def build_polygon(r):
-#        lon0, lon1 = r.name[0].left, r.name[0].right
-#       lat0, lat1 = r.name[1].left, r.name[1].right
-#        return Polygon([[lon0, lat0],[lon1, lat0], [lon1, lat1], [lon0, lat1]])
+    #    def build_polygon(r):
+    #        lon0, lon1 = r.name[0].left, r.name[0].right
+    #       lat0, lat1 = r.name[1].left, r.name[1].right
+    #        return Polygon([[lon0, lat0],[lon1, lat0], [lon1, lat1], [lon0, lat1]])
 
-#    df["Coordinates"] = df.apply(build_polygon, axis=1)
-#    df = geopandas.GeoDataFrame(df, geometry="Coordinates", crs="EPSG:4326")
-#    df["area"] = df.to_crs(crs = "epsg:3857").area /1e6 / 1e4 # 100km^2 units
-    
+    #    df["Coordinates"] = df.apply(build_polygon, axis=1)
+    #    df = geopandas.GeoDataFrame(df, geometry="Coordinates", crs="EPSG:4326")
+    #    df["area"] = df.to_crs(crs = "epsg:3857").area /1e6 / 1e4 # 100km^2 units
+
     return df

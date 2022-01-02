@@ -155,13 +155,15 @@ def quick_llc_plot(data, axis_off=False, **kwargs):
 
 # ------------------------------ pretty ---------------------------------------
 
+
 def _ortho_proj(extent):
-    """ returns orthographic projection from extent
-    """
-    return ccrs.Orthographic(central_longitude=(extent[0]+extent[1])*.5, 
-                         central_latitude=(extent[2]+extent[3])*.5, 
-                         globe=None,
-                        )
+    """returns orthographic projection from extent"""
+    return ccrs.Orthographic(
+        central_longitude=(extent[0] + extent[1]) * 0.5,
+        central_latitude=(extent[2] + extent[3]) * 0.5,
+        globe=None,
+    )
+
 
 regions = {
     "atlantic": {
@@ -191,19 +193,22 @@ regions = {
         "projection": ccrs.EckertIII(central_longitude=-180),
     },
     "marquises-0": {
-        'faces': [5, 7, 8, 11],
-        'extent':[-140, -130, -20, -10],
-        'projection': ccrs.PlateCarree(),
-        'dticks':[5,5],
+        "faces": [5, 7, 8, 11],
+        "extent": [-140, -130, -20, -10],
+        "projection": ccrs.PlateCarree(),
+        "dticks": [5, 5],
     },
     "marquises-1": {
-        'faces': [8,],
-        'extent':[-140, -130, -20, -10],
-        'projection': _ortho_proj([-140, -130, -20, -10]),
-        'dticks':[5,5],
-    }
+        "faces": [
+            8,
+        ],
+        "extent": [-140, -130, -20, -10],
+        "projection": _ortho_proj([-140, -130, -20, -10]),
+        "dticks": [5, 5],
+    },
 }
 #                  'south-atlantic':{'faces':[0,1,11,12],'extent':[-100,25,-70,5]},}
+
 
 def plot_pretty(
     v,
@@ -252,7 +257,7 @@ def plot_pretty(
         _extent = params["extent"]
         #
         if "face" not in v.dims:
-            #v = v.expand_dims("face")
+            # v = v.expand_dims("face")
             _faces = [None]
         elif "faces" in params:
             _faces = (face for face in params["faces"] if face not in ignore_face)
@@ -272,10 +277,11 @@ def plot_pretty(
         #    ax.coastlines(resolution=coast_resolution, color='k')
         if land:
             if isinstance(land, dict):
-                land_feature = cfeature.NaturalEarthFeature(*land['args'], 
-                                                            **land['kwargs'],
-                                                           )
-                #land = {'args': ['physical', 'land', '10m'], 
+                land_feature = cfeature.NaturalEarthFeature(
+                    *land["args"],
+                    **land["kwargs"],
+                )
+                # land = {'args': ['physical', 'land', '10m'],
                 #        'kwargs': {edgecolor='face',
                 #                   facecolor=cfeature.COLORS['land'],
                 #                  }}
@@ -289,10 +295,11 @@ def plot_pretty(
             ax.set_extent(_extent)
         if swot_tracks:
             tracks = load_swot_tracks(bbox=_extent)["swath"]
-            swot_kwargs = dict(facecolor='grey',
-                               edgecolor='white',
-                               alpha=0.5,
-                              )
+            swot_kwargs = dict(
+                facecolor="grey",
+                edgecolor="white",
+                alpha=0.5,
+            )
             if isinstance(swot_tracks, dict):
                 swot_kwargs.update(swot_tracks)
         for face in _faces:
@@ -347,7 +354,7 @@ def plot_pretty(
             cbar = fig.colorbar(im, **colorbar_kwargs)
         else:
             cbar = None
-        if gridlines and _extent is not None and _projection!=ccrs.EckertIII():
+        if gridlines and _extent is not None and _projection != ccrs.EckertIII():
             # grid lines:
             xticks = np.arange(
                 _extent[0],
@@ -378,10 +385,11 @@ def plot_pretty(
         #
         if swot_tracks:
             crs_proj4 = _projection.proj4_init
-            ax.add_geometries(tracks.to_crs(crs_proj4)['geometry'],
-                              crs=_projection,
-                              **swot_kwargs,
-                             )
+            ax.add_geometries(
+                tracks.to_crs(crs_proj4)["geometry"],
+                crs=_projection,
+                **swot_kwargs,
+            )
         if title is not None:
             ax.set_title(title, fontdict={"fontsize": 20, "fontweight": "bold"})
         #

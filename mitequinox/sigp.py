@@ -174,7 +174,7 @@ def print_rechunk(r, v=None):
         s = r._source
         i = r._intermediate
         t = r._target
-                
+
     # source size
     print(
         "Source data size: \t\t "
@@ -222,9 +222,11 @@ def print_rechunk(r, v=None):
 # ------------------------------ temporal filters ---------------------------------------
 
 
-def generate_filter(band, T=10, dt=1/24, lat=None, bandwidth=None, normalized_bandwidth=None):
+def generate_filter(
+    band, T=10, dt=1 / 24, lat=None, bandwidth=None, normalized_bandwidth=None
+):
     """Wrapper around scipy.signal.firwing
-    
+
     Parameters
     ----------
     band: str, float
@@ -240,16 +242,16 @@ def generate_filter(band, T=10, dt=1/24, lat=None, bandwidth=None, normalized_ba
     dt: float
         hours
     """
-    numtaps = int(T*24)    
+    numtaps = int(T * 24)
     pass_zero = False
     #
     if band == "subdiurnal":
         pass_zero = True
-        cutoff = [1.0 / 2.0]    
+        cutoff = [1.0 / 2.0]
     elif band == "semidiurnal":
-        omega = 1.9322 #  M2 24/12.4206012 = 1.9322
+        omega = 1.9322  #  M2 24/12.4206012 = 1.9322
     elif band == "diurnal":
-        omega = 1. # K1 24/23.93447213 = 1.0027
+        omega = 1.0  # K1 24/23.93447213 = 1.0027
     elif band == "inertial":
         try:
             omega = coriolis(lat) * 3600 / 2.0 / np.pi
@@ -261,21 +263,22 @@ def generate_filter(band, T=10, dt=1/24, lat=None, bandwidth=None, normalized_ba
     if bandwidth is not None:
         cutoff = [omega - bandwidth, omega + bandwidth]
     elif normalized_bandwidth is not None:
-        cutoff = [omega * (1 - normalized_bandwidth), 
-                  omega * (1.0 + normalized_bandwidth),
-                 ]
+        cutoff = [
+            omega * (1 - normalized_bandwidth),
+            omega * (1.0 + normalized_bandwidth),
+        ]
     elif band != "subdiurnal":
         print("bandwidth or normalized_bandwidth needs to be provided")
     #
     h = signal.firwin(
-        numtaps, cutoff=cutoff, pass_zero=pass_zero, fs=1/dt, scale=True
+        numtaps, cutoff=cutoff, pass_zero=pass_zero, fs=1 / dt, scale=True
     )
     return h
 
 
-def filter_response(h, dt=1/24):
+def filter_response(h, dt=1 / 24):
     """Returns the frequency response"""
-    w, hh = signal.freqz(h, worN=8000, fs=1/dt)
+    w, hh = signal.freqz(h, worN=8000, fs=1 / dt)
     return hh, w
 
 
@@ -318,7 +321,7 @@ def get_E(v, f=None, **kwargs):
         Nb = 60 * 24
         kwargs["nperseg"] = Nb
     if "return_onesided" in kwargs and kwargs["return_onesided"]:
-        Nb = int(Nb/2)+1
+        Nb = int(Nb / 2) + 1
     if f is None:
         f, E = _get_E(v.values, ufunc=False, **kwargs)
         return f, E
@@ -347,16 +350,17 @@ def getsize(dir_path):
     process.close()
     return size * 1e3
 
+
 def get_tidal_frequencies(*args, units="cpd"):
-    """
-    """
+    """ """
     from pytide import WaveTable
+
     td = WaveTable()
-    if units=="cpd":
-        scale=86400/2/np.pi
-    elif units=="cph":
-        scale=3600/2/np.pi
+    if units == "cpd":
+        scale = 86400 / 2 / np.pi
+    elif units == "cph":
+        scale = 3600 / 2 / np.pi
     else:
         # cps
-        scale=1/2/np.pi
+        scale = 1 / 2 / np.pi
     return {c: td.wave(c).freq * scale for c in args}

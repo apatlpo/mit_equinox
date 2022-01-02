@@ -17,7 +17,7 @@ from time import sleep, time
 from tqdm import tqdm
 
 # ideal dask size
-_chunk_size_threshold = 4000*3000
+_chunk_size_threshold = 4000 * 3000
 
 # ------------------------------ parameters, geometry -------------------------------------
 
@@ -26,6 +26,7 @@ omega_earth = 2.0 * np.pi / 86164.0905
 deg2rad = np.pi / 180.0
 deg2m = 111319
 earth_radius = 6378.0
+
 
 def haversine(lon1, lat1, lon2, lat2):
     """Computes the Haversine distance in kilometres between two points
@@ -45,6 +46,7 @@ def haversine(lon1, lat1, lon2, lat2):
     )
     return arclen * earth_radius
 
+
 def coriolis(lat, signed=True):
     if signed:
         return 2.0 * omega_earth * np.sin(lat * deg2rad)
@@ -60,7 +62,7 @@ def dfdy(lat, units="1/s/m"):
 
 
 def fix_lon_bounds(lon):
-    """ reset longitudes bounds to (-180,180)"""
+    """reset longitudes bounds to (-180,180)"""
     if isinstance(lon, xr.DataArray):  # xarray
         return lon.where(lon < 180.0, other=lon - 360)
     elif isinstance(lon, pd.Series):  # pandas series
@@ -113,7 +115,7 @@ elif os.path.isdir("/Users/aponte"):
 
 
 def load_grd(V=None, ftype="zarr", **kwargs):
-    """ Load llc4320 grid
+    """Load llc4320 grid
     Parameters
     ----------
         V: str, list, optional
@@ -122,9 +124,10 @@ def load_grd(V=None, ftype="zarr", **kwargs):
     if ftype == "zarr":
         dkwargs = dict(consolidated=False)
         dkwargs.update(**kwargs)
-        ds = xr.open_zarr(ref_data_dir + "grid.zarr", 
-                          **dkwargs,
-                         )
+        ds = xr.open_zarr(
+            ref_data_dir + "grid.zarr",
+            **dkwargs,
+        )
         if V is not None:
             ds = ds.reset_coords()[V].set_coords(names=V)
     elif ftype == "nc":
@@ -170,7 +173,7 @@ def load_data(V, ftype="zarr", merge=True, **kwargs):
     if isinstance(V, list):
         out = [load_data(v, ftype=ftype, **kwargs) for v in V]
         if merge:
-            return xr.merge(out, join='inner')
+            return xr.merge(out, join="inner")
         else:
             return out
         return
@@ -211,31 +214,30 @@ def load_data_nc(v, suff="_t*", files=None, **kwargs):
     )
     return ds
 
+
 def load_llc(v, dij, t_start, t_end):
-    """ load llc data and subsample
-    """
+    """load llc data and subsample"""
     if isinstance(v, list):
         return xr.merge([load_llc(_v, dij, t_start, t_end) for _v in v])
-    ds = (load_data(V=[v])
-          .sel(time=slice(str(t_start), str(t_end)))
-         )
+    ds = load_data(V=[v]).sel(time=slice(str(t_start), str(t_end)))
 
     i, j = get_ij_dims(ds[v])
-    ds = ds.rename({i: 'i', j: 'j'})
-    ds = ds.isel(i=slice(0, None, dij),
-                 j=slice(0, None, dij),
-                )
-    coords = ['XC', 'YC']
-    if v in ['SSU', 'SSV']:
-        coords = coords + ['CS', 'SN']
-    grd = (load_grd()[coords]
-           .isel(i=slice(0, None, dij),
-                 j=slice(0, None, dij),
-                )
-          )
+    ds = ds.rename({i: "i", j: "j"})
+    ds = ds.isel(
+        i=slice(0, None, dij),
+        j=slice(0, None, dij),
+    )
+    coords = ["XC", "YC"]
+    if v in ["SSU", "SSV"]:
+        coords = coords + ["CS", "SN"]
+    grd = load_grd()[coords].isel(
+        i=slice(0, None, dij),
+        j=slice(0, None, dij),
+    )
     #       .load_grd()[['XC', 'YC', 'XG', 'YG']]
     llc = xr.merge([ds, grd])
     return llc
+
 
 def load_iters_date_files(v="Eta"):
     """For a given variable returns a dataframe of available data"""
@@ -263,8 +265,9 @@ def load_common_timeline(V, raw=False, verbose=True):
         print(df.index[0], " to ", df.index[-1])
     return df
 
+
 def find_ijface(lon, lat, face=None, radius=2):
-    """ Find indexes based on lon/lat within a given radius
+    """Find indexes based on lon/lat within a given radius
 
     Parameters
     ----------
@@ -279,27 +282,33 @@ def find_ijface(lon, lat, face=None, radius=2):
     if face is not None:
         grd = grd.sel(face=face)
 
-    #d = (np.cos(np.pi/180*grd.)*(grd.XC-lon))**2 + (grd.XC-lat)**2
+    # d = (np.cos(np.pi/180*grd.)*(grd.XC-lon))**2 + (grd.XC-lat)**2
     d = haversine(lon, lat, grd.XC, grd.YC)
     dmin = d.min().compute()
 
-    d_loc = d.where(d<dmin+radius, drop=True).compute()
-    i = {d: slice(int(min(d_loc[d])), int(max(d_loc[d]))+1) for d in ["i", "j", "face"]}
+    d_loc = d.where(d < dmin + radius, drop=True).compute()
+    i = {
+        d: slice(int(min(d_loc[d])), int(max(d_loc[d])) + 1) for d in ["i", "j", "face"]
+    }
     i["i_g"] = i["i"]
     i["j_g"] = i["j"]
 
     return i
 
+
 # ------------------------------ diagnosics -----------------------------------
 
-def store_diagnostic(name, data,
-                     overwrite=False,
-                     file_format=None,
-                     directory=None,
-                     auto_rechunk=True,
-                     **kwargs
-                    ):
-    """ Write diagnostics to disk
+
+def store_diagnostic(
+    name,
+    data,
+    overwrite=False,
+    file_format=None,
+    directory=None,
+    auto_rechunk=True,
+    **kwargs,
+):
+    """Write diagnostics to disk
     Parameters
     ----------
     name: str
@@ -327,49 +336,52 @@ def store_diagnostic(name, data,
         data = _auto_rechunk(data)
     #
     if isinstance(data, xr.DataArray):
-        store_diagnostic(name, data.to_dataset(),
-                         overwrite=overwrite,
-                         file_format=file_format,
-                         directory=directory,
-                         auto_rechunk=True,
-                         **kwargs,
-                        )
+        store_diagnostic(
+            name,
+            data.to_dataset(),
+            overwrite=overwrite,
+            file_format=file_format,
+            directory=directory,
+            auto_rechunk=True,
+            **kwargs,
+        )
     elif isinstance(data, xr.Dataset):
-        success=False
-        if file_format is None or file_format.lower() in ['zarr', '.zarr']:
-            _file = os.path.join(_dir, name+'.zarr')
+        success = False
+        if file_format is None or file_format.lower() in ["zarr", ".zarr"]:
+            _file = os.path.join(_dir, name + ".zarr")
             write_kwargs = dict(kwargs)
             if overwrite:
-                write_kwargs.update({'mode': 'w'})
+                write_kwargs.update({"mode": "w"})
             data = _move_singletons_as_attrs(data)
             data = _reset_chunk_encoding(data)
             data.to_zarr(_file, **write_kwargs)
-            success=True
-        elif file_format.lower() in ['nc', 'netcdf']:
-            _file = os.path.join(_dir, name+'.nc')
+            success = True
+        elif file_format.lower() in ["nc", "netcdf"]:
+            _file = os.path.join(_dir, name + ".nc")
             write_kwargs = dict(kwargs)
             if overwrite:
-                write_kwargs.update({'mode': 'w'})
+                write_kwargs.update({"mode": "w"})
             data.to_netcdf(_file, **write_kwargs)
-            success=True
+            success = True
         if success:
-            print('data stored in {}'.format(_file))
+            print("data stored in {}".format(_file))
 
-def is_diagnostic(name,
-                  directory=None,
-                 ):
-    """ Indicates whether diagnostic zarr archive exists
+
+def is_diagnostic(
+    name,
+    directory=None,
+):
+    """Indicates whether diagnostic zarr archive exists
     Obviously does not indicate wether it is complete
     """
     if directory is None:
         directory = diag_dir
-    zarr_dir = os.path.join(directory, name+'.zarr')
+    zarr_dir = os.path.join(directory, name + ".zarr")
     return os.path.isdir(zarr_dir)
 
-def load_diagnostic(name,
-                    directory=None,
-                    **kwargs):
-    """ Load diagnostics from disk
+
+def load_diagnostic(name, directory=None, **kwargs):
+    """Load diagnostics from disk
     Parameters
     ----------
     name: str, list
@@ -384,23 +396,24 @@ def load_diagnostic(name,
         directory = diag_dir
     _dir = _check_diagnostic_directory(directory)
     # find the diagnostic file
-    _file = glob(os.path.join(_dir,name+'.*'))
-    assert len(_file)==1, 'More that one diagnostic file {}'.format(_file)
+    _file = glob(os.path.join(_dir, name + ".*"))
+    assert len(_file) == 1, "More that one diagnostic file {}".format(_file)
     _file = _file[0]
     # get extension
-    _extension = _file.split('.')[-1]
-    if _extension=='zarr':
+    _extension = _file.split(".")[-1]
+    if _extension == "zarr":
         return xr.open_zarr(_file, **kwargs)
-    elif _extension=='nc':
+    elif _extension == "nc":
         return xr.open_dataset(_file, **kwargs)
     else:
-        raise NotImplementedError('{} extension not implemented yet'
-                                  .format(_extension))
+        raise NotImplementedError("{} extension not implemented yet".format(_extension))
 
-def _check_diagnostic_directory(directory,
-                                create=True,
-                               ):
-    """ Check existence of a directory and create it if necessary
+
+def _check_diagnostic_directory(
+    directory,
+    create=True,
+):
+    """Check existence of a directory and create it if necessary
 
     Parameters
     ----------
@@ -414,59 +427,68 @@ def _check_diagnostic_directory(directory,
         if create:
             # need to create the directory
             os.mkdir(directory)
-            print('Create new diagnostic directory {}'.format(directory))
+            print("Create new diagnostic directory {}".format(directory))
         else:
-            raise OSError('Directory does not exist')
+            raise OSError("Directory does not exist")
     return directory
 
+
 def _move_singletons_as_attrs(ds, ignore=[]):
-    """ change singleton variables and coords to attrs
+    """change singleton variables and coords to attrs
     This seems to be required for zarr archiving
     """
-    for c,co in ds.coords.items():
-        if co.size==1 and ( len(co.dims)==1 and co.dims[0] not in ignore or len(co.dims)==0 ):
+    for c, co in ds.coords.items():
+        if co.size == 1 and (
+            len(co.dims) == 1 and co.dims[0] not in ignore or len(co.dims) == 0
+        ):
             value = ds[c].values
             if isinstance(value, np.datetime64):
                 value = str(value)
             ds = ds.drop_vars(c).assign_attrs({c: value})
     for v in ds.data_vars:
-        if ds[v].size==1 and ( len(v.dims)==1 and v.dims[0] not in ignore or len(v.dims)==0 ):
+        if ds[v].size == 1 and (
+            len(v.dims) == 1 and v.dims[0] not in ignore or len(v.dims) == 0
+        ):
             ds = ds.drop_vars(v).assign_attrs({v: ds[v].values})
     return ds
 
+
 def _reset_chunk_encoding(ds):
-    ''' Delete chunks from variables encoding.
+    """Delete chunks from variables encoding.
     This may be required when loading zarr data and rewriting it with different chunks
 
     Parameters
     ----------
     ds: xr.DataArray, xr.Dataset
         Input data
-    '''
+    """
     if isinstance(ds, xr.DataArray):
         return _reset_chunk_encoding(ds.to_dataset()).to_array()
     #
     for v in ds.coords:
-        if 'chunks' in ds[v].encoding:
-            del ds[v].encoding['chunks']
+        if "chunks" in ds[v].encoding:
+            del ds[v].encoding["chunks"]
     for v in ds:
-        if 'chunks' in ds[v].encoding:
-            del ds[v].encoding['chunks']
+        if "chunks" in ds[v].encoding:
+            del ds[v].encoding["chunks"]
     return ds
 
+
 def _check_chunks_sizes(da):
-    """ checks that chunk sizes are above the _chunk_size_threshold
-    """
+    """checks that chunk sizes are above the _chunk_size_threshold"""
     averaged_chunk_size, total_size = _get_averaged_chunk_size(da)
-    assert averaged_chunk_size==total_size or averaged_chunk_size>_chunk_size_threshold, \
-        '{} chunks are two small, rechunk such that chunk sizes'.format(da.name) \
-        + ' exceed {} elements on average,'.format(_chunk_size_threshold) \
-        + ' there are currently ' \
-        + '{} points per chunks on average'.format(averaged_chunk_size)
+    assert (
+        averaged_chunk_size == total_size or averaged_chunk_size > _chunk_size_threshold
+    ), (
+        "{} chunks are two small, rechunk such that chunk sizes".format(da.name)
+        + " exceed {} elements on average,".format(_chunk_size_threshold)
+        + " there are currently "
+        + "{} points per chunks on average".format(averaged_chunk_size)
+    )
+
 
 def _get_averaged_chunk_size(da):
-    """ returns the averaged number of elements in the dataset
-    """
+    """returns the averaged number of elements in the dataset"""
     # total number of elements
     total_size = int(np.array(list(da.sizes.values())).prod())
     # averaged number of chunks along each dimension:
@@ -477,54 +499,57 @@ def _get_averaged_chunk_size(da):
         chunk_size = total_size
     return chunk_size, total_size
 
+
 def _auto_rechunk_da(da):
-    """ Automatically rechunk a DataArray such as chunks number of elements
+    """Automatically rechunk a DataArray such as chunks number of elements
     exceeds _chunk_size_threshold
     """
-    dims = ['i', 'i_g', 'j', 'j_g', 'face',
-            'k', 'lon', 'lat',
-            'time']
+    dims = ["i", "i_g", "j", "j_g", "face", "k", "lon", "lat", "time"]
     for d in dims:
         # gather da number of elements and chunk sizes
         averaged_chunk_size, total_size = _get_averaged_chunk_size(da)
         # exit if there is one chunk
-        if averaged_chunk_size==total_size:
+        if averaged_chunk_size == total_size:
             break
         # rechunk along dimenion d
-        if (d in da.dims) and averaged_chunk_size<_chunk_size_threshold:
+        if (d in da.dims) and averaged_chunk_size < _chunk_size_threshold:
             dim_chunk_size = np.max(da.chunks[da.get_axis_num(d)])
             # simple rule of 3
-            factor = max(1, np.ceil(_chunk_size_threshold/averaged_chunk_size))
-            new_chunk_size = int( dim_chunk_size * factor )
+            factor = max(1, np.ceil(_chunk_size_threshold / averaged_chunk_size))
+            new_chunk_size = int(dim_chunk_size * factor)
             # bounded by dimension size
             new_chunk_size = min(da[d].size, new_chunk_size)
             da = da.chunk({d: new_chunk_size})
     return da
 
+
 def _auto_rechunk(ds):
-    """ Wrapper around _auto_rechunk_da for datasets
+    """Wrapper around _auto_rechunk_da for datasets
     Accepts DataArrays as well however.
     """
     if isinstance(ds, xr.DataArray):
         return _auto_rechunk_da(ds)
-    for k, da in ds.items(): # data_vars
+    for k, da in ds.items():  # data_vars
         ds = ds.assign(**{k: _auto_rechunk_da(da)})
     for k, da in ds.coords.items():
         ds = ds.assign_coords(**{k: _auto_rechunk_da(da)})
     return ds
 
+
 # ------------------------------ misc ---------------------------------------
 
-def spin_up_cluster(ctype, 
-                    jobs=None, 
-                    processes=None, 
-                    fraction=0.8,
-                    timeout=20,
-                    **kwargs,
-                   ):
-    """ Spin up a dask cluster ... or not
+
+def spin_up_cluster(
+    ctype,
+    jobs=None,
+    processes=None,
+    fraction=0.8,
+    timeout=20,
+    **kwargs,
+):
+    """Spin up a dask cluster ... or not
     Waits for workers to be up for distributed ones
-    
+
     Paramaters
     ----------
     ctype: None, str
@@ -538,20 +563,22 @@ def spin_up_cluster(ctype,
         Default is 20 minutes
     fraction: float, optional
         Waits for fraction of workers to be up
-        
+
     """
 
     if ctype is None:
         return
-    elif ctype=="local":
+    elif ctype == "local":
         from dask.distributed import Client, LocalCluster
+
         dkwargs = dict(n_workers=14, threads_per_worker=1)
         dkwargs.update(**kwargs)
-        cluster = LocalCluster(**dkwargs) # these may not be hardcoded
+        cluster = LocalCluster(**dkwargs)  # these may not be hardcoded
         client = Client(cluster)
-    elif ctype=="distributed":
+    elif ctype == "distributed":
         from dask_jobqueue import PBSCluster
         from dask.distributed import Client
+
         assert jobs, "you need to specify a number of dask-queue jobs"
         cluster = PBSCluster(processes=processes, **kwargs)
         cluster.scale(jobs=jobs)
@@ -559,28 +586,29 @@ def spin_up_cluster(ctype,
 
         if not processes:
             processes = cluster.worker_spec[0]["options"]["processes"]
-        
+
         flag = True
         start = time()
         while flag:
             wk = client.scheduler_info()["workers"]
             print("Number of workers up = {}".format(len(wk)))
             sleep(5)
-            if len(wk)>=processes*jobs*fraction:
+            if len(wk) >= processes * jobs * fraction:
                 flag = False
                 print("Cluster is up, proceeding with computations")
             now = time()
-            if (now-start)/60>timeout:
+            if (now - start) / 60 > timeout:
                 flag = False
                 print("Timeout: cluster did not spin up, closing")
                 cluster.close()
                 client.close()
                 cluster, client = None, None
-                
+
     return cluster, client
 
+
 def dashboard_ssh_forward(client):
-    """ returns the command to execute on a local computer in order to
+    """returns the command to execute on a local computer in order to
     have access to dashboard at the following address in a browser:
     http://localhost:8787/status
     """
@@ -588,32 +616,52 @@ def dashboard_ssh_forward(client):
     port = client.scheduler_info()["services"]["dashboard"]
     return f'ssh -N -L {port}:{env["HOSTNAME"]}:8787 {env["USER"]}@datarmor1-10g'
 
-face_connections = {'face': {0: {'X': ((12, 'Y', False), (3, 'X', False)),
-              'Y': (None, (1, 'Y', False))},
-          1: {'X': ((11, 'Y', False), (4, 'X', False)),
-              'Y': ((0, 'Y', False), (2, 'Y', False))},
-          2: {'X': ((10, 'Y', False), (5, 'X', False)),
-              'Y': ((1, 'Y', False), (6, 'X', False))},
-          3: {'X': ((0, 'X', False), (9, 'Y', False)),
-              'Y': (None, (4, 'Y', False))},
-          4: {'X': ((1, 'X', False), (8, 'Y', False)),
-              'Y': ((3, 'Y', False), (5, 'Y', False))},
-          5: {'X': ((2, 'X', False), (7, 'Y', False)),
-              'Y': ((4, 'Y', False), (6, 'Y', False))},
-          6: {'X': ((2, 'Y', False), (7, 'X', False)),
-              'Y': ((5, 'Y', False), (10, 'X', False))},
-          7: {'X': ((6, 'X', False), (8, 'X', False)),
-              'Y': ((5, 'X', False), (10, 'Y', False))},
-          8: {'X': ((7, 'X', False), (9, 'X', False)),
-              'Y': ((4, 'X', False), (11, 'Y', False))},
-          9: {'X': ((8, 'X', False), None),
-              'Y': ((3, 'X', False), (12, 'Y', False))},
-          10: {'X': ((6, 'Y', False), (11, 'X', False)),
-               'Y': ((7, 'Y', False), (2, 'X', False))},
-          11: {'X': ((10, 'X', False), (12, 'X', False)),
-               'Y': ((8, 'Y', False), (1, 'X', False))},
-          12: {'X': ((11, 'X', False), None),
-               'Y': ((9, 'Y', False), (0, 'X', False))}}}
+
+face_connections = {
+    "face": {
+        0: {"X": ((12, "Y", False), (3, "X", False)), "Y": (None, (1, "Y", False))},
+        1: {
+            "X": ((11, "Y", False), (4, "X", False)),
+            "Y": ((0, "Y", False), (2, "Y", False)),
+        },
+        2: {
+            "X": ((10, "Y", False), (5, "X", False)),
+            "Y": ((1, "Y", False), (6, "X", False)),
+        },
+        3: {"X": ((0, "X", False), (9, "Y", False)), "Y": (None, (4, "Y", False))},
+        4: {
+            "X": ((1, "X", False), (8, "Y", False)),
+            "Y": ((3, "Y", False), (5, "Y", False)),
+        },
+        5: {
+            "X": ((2, "X", False), (7, "Y", False)),
+            "Y": ((4, "Y", False), (6, "Y", False)),
+        },
+        6: {
+            "X": ((2, "Y", False), (7, "X", False)),
+            "Y": ((5, "Y", False), (10, "X", False)),
+        },
+        7: {
+            "X": ((6, "X", False), (8, "X", False)),
+            "Y": ((5, "X", False), (10, "Y", False)),
+        },
+        8: {
+            "X": ((7, "X", False), (9, "X", False)),
+            "Y": ((4, "X", False), (11, "Y", False)),
+        },
+        9: {"X": ((8, "X", False), None), "Y": ((3, "X", False), (12, "Y", False))},
+        10: {
+            "X": ((6, "Y", False), (11, "X", False)),
+            "Y": ((7, "Y", False), (2, "X", False)),
+        },
+        11: {
+            "X": ((10, "X", False), (12, "X", False)),
+            "Y": ((8, "Y", False), (1, "X", False)),
+        },
+        12: {"X": ((11, "X", False), None), "Y": ((9, "Y", False), (0, "X", False))},
+    }
+}
+
 
 def getsize(dir_path):
     """Returns the size of a directory in bytes"""
@@ -633,21 +681,25 @@ def get_ij_dims(da):
     j = next((d for d in da.dims if d[0] == "j"))
     return i, j
 
+
 def removekey(d, key):
     r = dict(d)
     del r[key]
     return r
 
-def custom_distribute(ds, op,
-                      tmp_dir=None,
-                      suffix="tmp",
-                      overwrite=True,
-                      append=False,
-                      _root=True,
-                      op_kwargs={},
-                      **kwargs,
-                     ):
-    """ Distribute an embarrasingly parallel calculation manually and store chunks to disk
+
+def custom_distribute(
+    ds,
+    op,
+    tmp_dir=None,
+    suffix="tmp",
+    overwrite=True,
+    append=False,
+    _root=True,
+    op_kwargs={},
+    **kwargs,
+):
+    """Distribute an embarrasingly parallel calculation manually and store chunks to disk
     Data can be written temporarily to disk with a restart capability or directly persisted
     in memory.
 
@@ -682,17 +734,24 @@ def custom_distribute(ds, op,
 
     new_kwargs = removekey(kwargs, d)
     dim = ds[d].values
-    chunks = [dim[i*c:(i+1)*c] for i in range((dim.size + c - 1) // c )]
+    chunks = [dim[i * c : (i + 1) * c] for i in range((dim.size + c - 1) // c)]
 
     # various conditions should be fullfilled:
-    assert not overwrite or tmp_dir is not None, "tmp_dir is required if `overwrite=False`"
-    assert not append or not new_kwargs, "Appending data to a single zarr archive is"\
-        +" not implemented for multiple dimensions"
-    assert overwrite or not append, "overwrite=False and append=True should not make sense"\
-        +" at the moment"
-    assert not append or c>1, "the size of the chunks along the selected dimension needs to"\
-        +" be greater than 1 if you want to append to a single zarr archive, see "\
-        +" https://github.com/pydata/xarray/issues/4084"
+    assert (
+        not overwrite or tmp_dir is not None
+    ), "tmp_dir is required if `overwrite=False`"
+    assert not append or not new_kwargs, (
+        "Appending data to a single zarr archive is"
+        + " not implemented for multiple dimensions"
+    )
+    assert overwrite or not append, (
+        "overwrite=False and append=True should not make sense" + " at the moment"
+    )
+    assert not append or c > 1, (
+        "the size of the chunks along the selected dimension needs to"
+        + " be greater than 1 if you want to append to a single zarr archive, see "
+        + " https://github.com/pydata/xarray/issues/4084"
+    )
 
     D, Z = [], []
     iterator = zip(chunks, range(len(chunks)))
@@ -701,17 +760,19 @@ def custom_distribute(ds, op,
         # tqdm may be redirected to the logger and a file:
         # https://github.com/tqdm/tqdm/issues/313
     for c, i in iterator:
-        #_ds = ds.isel(**{d: slice(c[0], c[-1]+1)})
+        # _ds = ds.isel(**{d: slice(c[0], c[-1]+1)})
         _ds = ds.sel(**{d: c})
-        _suffix = suffix+"_{}".format(i)
+        _suffix = suffix + "_{}".format(i)
         if new_kwargs:
-            ds_out, _Z = custom_distribute(_ds, op,
-                                           tmp_dir=tmp_dir,
-                                           suffix=_suffix,
-                                           _root=False,
-                                           op_kwargs=op_kwargs,
-                                           **new_kwargs,
-                                          )
+            ds_out, _Z = custom_distribute(
+                _ds,
+                op,
+                tmp_dir=tmp_dir,
+                suffix=_suffix,
+                _root=False,
+                op_kwargs=op_kwargs,
+                **new_kwargs,
+            )
             D.append(ds_out)
             Z.append(_Z)
         else:
@@ -720,7 +781,7 @@ def custom_distribute(ds, op,
                 # store
                 if append:
                     zarr = os.path.join(tmp_dir, suffix)
-                    if not os.path.isdir(zarr): # not sure this is necessary
+                    if not os.path.isdir(zarr):  # not sure this is necessary
                         ds_out.to_zarr(zarr, mode="w")
                     else:
                         ds_out.to_zarr(zarr, append_dim=d)
@@ -747,13 +808,15 @@ def custom_distribute(ds, op,
 
     return ds, Z
 
-def custom_distribute_concat(ds,
-                             tmp_dir,
-                             suffix="tmp",
-                             _root=True,
-                             **kwargs,
-                            ):
-    """ Load and concatenate data tempory files
+
+def custom_distribute_concat(
+    ds,
+    tmp_dir,
+    suffix="tmp",
+    _root=True,
+    **kwargs,
+):
+    """Load and concatenate data tempory files
 
     Parameters
     ----------
@@ -774,21 +837,22 @@ def custom_distribute_concat(ds,
     new_kwargs = removekey(kwargs, d)
 
     dim = ds[d].values
-    chunks = [dim[i*c:(i+1)*c] for i in range((dim.size + c - 1) // c )]
+    chunks = [dim[i * c : (i + 1) * c] for i in range((dim.size + c - 1) // c)]
 
     D = []
     Z = []
     iterator = zip(chunks, range(len(chunks)))
     for c, i in iterator:
         _ds = ds.sel(**{d: c})
-        _suffix = suffix+"_{}".format(i)
+        _suffix = suffix + "_{}".format(i)
         if new_kwargs:
-            ds_out, _Z = custom_distribute_concat(_ds,
-                                                  tmp_dir,
-                                                  suffix=_suffix,
-                                                  _root=False,
-                                                  **new_kwargs,
-                                                 )
+            ds_out, _Z = custom_distribute_concat(
+                _ds,
+                tmp_dir,
+                suffix=_suffix,
+                _root=False,
+                **new_kwargs,
+            )
             D.append(ds_out)
             Z.append(_Z)
         else:
@@ -803,16 +867,17 @@ def custom_distribute_concat(ds,
 
     return ds, Z
 
-def filter_llc_regionally(t_range,
-                          v=None,
-                          faces=None,
-                          dij=None,
-                          zarr=None,
-                          overwrite=True,
-                          background=None,
-                         ):
-    """ Select
-    """
+
+def filter_llc_regionally(
+    t_range,
+    v=None,
+    faces=None,
+    dij=None,
+    zarr=None,
+    overwrite=True,
+    background=None,
+):
+    """Select"""
 
     if background is not None:
         v = background["v"]
@@ -824,28 +889,29 @@ def filter_llc_regionally(t_range,
         assert dij is not None
 
     if isinstance(t_range, pd.Index):
-        t_range = tuple(t_range[[0,-1]])
+        t_range = tuple(t_range[[0, -1]])
 
-    if v in ['SSU', 'SSV']:
-        V = ['SSU', 'SSV']
+    if v in ["SSU", "SSV"]:
+        V = ["SSU", "SSV"]
     else:
         V = v
     llc = load_llc(V, dij, t_range[0], t_range[1])
     llc = llc.sel(face=faces)
 
-    llc = llc.chunk({'time': 1, 'i': -1, 'j': -1})
-    if 'chunks' in llc.niter.encoding:
-        del llc.niter.encoding['chunks']
+    llc = llc.chunk({"time": 1, "i": -1, "j": -1})
+    if "chunks" in llc.niter.encoding:
+        del llc.niter.encoding["chunks"]
 
     if zarr is None:
-        zarr = os.path.join(scratch, 'zoom_llc')
+        zarr = os.path.join(scratch, "zoom_llc")
     #
     if overwrite:
-        mode='w'
+        mode = "w"
     else:
-        mode='w-'
+        mode = "w-"
     llc.to_zarr(zarr, mode=mode)
     return zarr
+
 
 # ------------------------------ enatl60 specific ---------------------------------------
 
@@ -904,8 +970,9 @@ def dateRange(date1, date2, dt=timedelta(days=1.0)):
 
 # ------------------------------ misc data ---------------------------------------
 
+
 def load_bathy(subsample=None, extent=None, land=False):
-    """ Load bathymetry (etopo1)
+    """Load bathymetry (etopo1)
 
     Parameters
     ----------
@@ -914,28 +981,35 @@ def load_bathy(subsample=None, extent=None, land=False):
                 30 leads to 1/2 deg resolution
                 15 leads to 1/4 deg resolution
     """
-    if platform=="datarmor":
+    if platform == "datarmor":
         path = os.path.join(osi, "equinox/misc/bathy/ETOPO1_Ice_g_gmt4.grd")
     ds = xr.open_dataset(path)
     if subsample is not None:
-        ds = ds.isel(x=slice(0, None, subsample),
-                     y=slice(0, None, subsample),
-                    )
+        ds = ds.isel(
+            x=slice(0, None, subsample),
+            y=slice(0, None, subsample),
+        )
     if extent is not None:
-        ds = ds.sel(x=slice(extent[0], extent[1]),
-                    y=slice(extent[2], extent[3]),
-                   )
-    da = -ds['z'].rename("h")
+        ds = ds.sel(
+            x=slice(extent[0], extent[1]),
+            y=slice(extent[2], extent[3]),
+        )
+    da = -ds["z"].rename("h")
     if not land:
-        da = da.where(da>=0)
-    da = da.rename({'x':'lon', 'y':'lat',})
+        da = da.where(da >= 0)
+    da = da.rename(
+        {
+            "x": "lon",
+            "y": "lat",
+        }
+    )
     da.attrs["long_name"] = "depth"
     # long_name (plot)
     return da
 
 
 def load_oceans(database="IHO", features=["oceans"]):
-    """ Load Oceans, Seas and other features shapes
+    """Load Oceans, Seas and other features shapes
 
     Usage
     -----
@@ -955,36 +1029,36 @@ def load_oceans(database="IHO", features=["oceans"]):
     Ocean seas shapefiles from: http://www.naturalearthdata.com/downloads/
 
     """
-    if platform=="datarmor":
+    if platform == "datarmor":
         root_shape_dir = os.path.join(osi, "equinox/misc/")
-    elif platform=="laptop":
+    elif platform == "laptop":
         root_shape_dir = "/Users/aponte/Data/shapefiles/"
-    if database=="IHO":
-        path = os.path.join(root_shape_dir,
-                            "World_Seas_IHO_v3/World_Seas_IHO_v3.shp"
-                           )
+    if database == "IHO":
+        path = os.path.join(root_shape_dir, "World_Seas_IHO_v3/World_Seas_IHO_v3.shp")
         gdf = gpd.read_file(path)
         gdf = gdf.rename(columns={c: c.lower() for c in gdf.columns})
         out = {}
         if "oceans" in features:
-            out["oceans"] = gdf.loc[gdf.name.str.contains('Ocean')]
+            out["oceans"] = gdf.loc[gdf.name.str.contains("Ocean")]
         if "seas" in features:
-            out["seas"] = gdf.loc[gdf.name.str.contains('Sea')]
+            out["seas"] = gdf.loc[gdf.name.str.contains("Sea")]
         if "other" in features:
-            out["other"] = gdf.loc[~gdf.name.str.contains('Ocean|Sea')]
-        if len(out)==1:
+            out["other"] = gdf.loc[~gdf.name.str.contains("Ocean|Sea")]
+        if len(out) == 1:
             return list(out.values())[0]
         else:
             return out
-    elif database=="ne_110m_ocean":
-        path = os.path.join(root_shape_dir,
-                            "ne_110m_ocean/ne_110m_ocean.shp",
-                           )
+    elif database == "ne_110m_ocean":
+        path = os.path.join(
+            root_shape_dir,
+            "ne_110m_ocean/ne_110m_ocean.shp",
+        )
         out = gpd.read_file(path)
         return out
 
+
 def load_swot_tracks(phase="calval", resolution=None, bbox=None, **kwargs):
-    """ Load SWOT tracks
+    """Load SWOT tracks
 
     Parameters
     ----------
@@ -994,7 +1068,7 @@ def load_swot_tracks(phase="calval", resolution=None, bbox=None, **kwargs):
         Specify resolution, for example "10s", default is "30s"
     """
 
-    if platform=="datarmor":
+    if platform == "datarmor":
         tracks_dir = "/home/datawork-lops-osi/equinox/misc/swot"
     else:
         tracks_dir = "/Users/aponte/Data/swot"
@@ -1009,15 +1083,18 @@ def load_swot_tracks(phase="calval", resolution=None, bbox=None, **kwargs):
     if bbox is None:
         return out
 
-    central_lon = (bbox[0]+bbox[1])*0.5
-    central_lat = (bbox[2]+bbox[3])*0.5
+    central_lon = (bbox[0] + bbox[1]) * 0.5
+    central_lat = (bbox[2] + bbox[3]) * 0.5
 
-    polygon = Polygon([(bbox[0], bbox[2]),
-                       (bbox[1], bbox[2]),
-                       (bbox[1], bbox[3]),
-                       (bbox[0], bbox[3]),
-                       (bbox[0], bbox[2]),
-                      ])
+    polygon = Polygon(
+        [
+            (bbox[0], bbox[2]),
+            (bbox[1], bbox[2]),
+            (bbox[1], bbox[3]),
+            (bbox[0], bbox[3]),
+            (bbox[0], bbox[2]),
+        ]
+    )
     out = {key: gpd.clip(gdf, polygon) for key, gdf in out.items()}
 
     return out
