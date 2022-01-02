@@ -15,15 +15,18 @@ conda create -n equinox -c conda-forge python=3.8 dask-jobqueue \
             hvplot geoviews datashader nodejs \
             intake-xarray gcsfs \
             cmocean gsw \
-            xhistogram \
-            pytide pyinterp \
+            xhistogram flox \
+            pytide pyinterp h3-py \
             parcels
+
 conda activate equinox
+
 #conda install -c conda-forge xgcm xmitgcm
 pip install git+https://github.com/xgcm/xgcm.git
 #conda install -c conda-forge xgcm
 pip install git+https://github.com/MITgcm/xmitgcm.git
 pip install git+https://github.com/xgcm/xrft.git
+
 #pip install rechunker
 #pip install git+https://github.com/pangeo-data/rechunker.git
 # need to download and revert to version v0.3.3 for now, see https://github.com/pangeo-data/rechunker/issues/92
@@ -31,19 +34,20 @@ git clone https://github.com/pangeo-data/rechunker.git
 cd rechunker
 git checkout 0.3.3 ??
 pip install -e .
-conda install libnetcdf=4.6.1
-conda install -c fbriol pyfes
-pip install h3
-#conda install -c conda-forge zstandard  # maybe not necessary with following line:
-#conda install -c conda-forge fastparquet
-#conda install fastparquet pyarrow -c conda-forge
+
+#conda install libnetcdf=4.6.1 # not necessary ?!
+#conda install -c fbriol pyfes
+
 conda install pywavelets
 pip install git+git://github.com/psf/black
-#
+
 cd mit_equinox; pip install -e .
+
+# line below does not work well on datarmor
 jupyter labextension install @jupyter-widgets/jupyterlab-manager \
                              @pyviz/jupyterlab_pyviz \
                              jupyter-leaflet
+
 cp launch/jobqueue.yaml launch/distributed.yaml ~/.config/dask/
 ```
 
@@ -151,9 +155,15 @@ conda list
 ## Install a package with pip
 
 For packages that are not available from conda or Anaconda.org, we can often install the package with pip (short for “pip installs packages”).
-Exporting environment
 
+## Creating and using an environment file
+
+Create environment file
 ```
-conda env export > environment.yml on a machine
-conda env create -f environment.yml -n $ENV_NAME on the new machine
+conda env create --file environment.yml
+```
+
+Create new environment from this file:
+```
+conda env export --name equinox --from-history --file environment.yml
 ```
