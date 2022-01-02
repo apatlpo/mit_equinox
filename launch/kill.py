@@ -1,7 +1,7 @@
 import subprocess, getpass
 #
 username = getpass.getuser()
-print(username)
+#print(username)
 #
 bashCommand = 'qstat'
 output = subprocess.check_output(bashCommand, shell=True)
@@ -9,8 +9,13 @@ output = subprocess.check_output(bashCommand, shell=True)
 for line in output.splitlines():
     lined = line.decode('UTF-8')
     if username in lined and 'dask' in lined:
-        print(lined)
+        #print(lined)
         pid = lined.split('.')[0]
         bashCommand = 'qdel '+str(pid)
-        boutput = subprocess.check_output(bashCommand, shell=True)
-
+        print(" "+bashCommand)
+        try:
+            boutput = subprocess.check_output(bashCommand,
+                                              shell=True,
+                                             )
+        except subprocess.CalledProcessError as e:
+            print("  ... errored")

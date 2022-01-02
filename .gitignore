@@ -48,4 +48,8 @@ jlab.pbs.o*
 *.log
 *.nodefile
 
+# specific data 
 sandbox/data
+parcels/run_*
+log
+

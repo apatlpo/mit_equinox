@@ -3,6 +3,9 @@
 #PBS -q mpi_1
 #PBS -l select=1:ncpus=28:mem=100g
 
+# tracejob 8509847
+# http://datadmin.ifremer.fr/ganglia/
+
 # cd to the directory you submitted your job
 cd $PBS_O_WORKDIR
 
@@ -13,8 +16,10 @@ setenv NUMEXPR_NUM_THREADS 1
 setenv MKL_NUM_THREADS 1
 setenv OPENBLAS_NUM_THREADS 1
 
+# core computation
+date
+python parcel_distributed.py
 date
 
-python parcels_distributed.py
-
-date
+# cleanup dask workers
+python /home1/datahome/aponte/mit_equinox/launch/kill.py

@@ -13,6 +13,7 @@ from datetime import timedelta, datetime
 
 from dask.distributed import wait
 
+from time import sleep, time
 from tqdm import tqdm
 
 # ideal dask size
@@ -514,10 +515,11 @@ def _auto_rechunk(ds):
 
 # ------------------------------ misc ---------------------------------------
 
-def spin_up_cluster(type=None, 
+def spin_up_cluster(ctype, 
                     jobs=None, 
                     processes=None, 
                     fraction=0.8,
+                    timeout=20,
                     **kwargs,
                    ):
     """ Spin up a dask cluster ... or not
@@ -525,25 +527,33 @@ def spin_up_cluster(type=None,
     
     Paramaters
     ----------
-    type: None, str
+    ctype: None, str
         Type of cluster: None=no cluster, "local", "distributed"
-    fraction: float
-        Waits for Fraction of 
+    jobs: int, optional
+        Number of PBS jobs
+    processes: int, optional
+        Number of processes per job (overrides default in .config/dask/jobqueue.yml)
+    timeout: int
+        Timeout in minutes is cluster does not spins up.
+        Default is 20 minutes
+    fraction: float, optional
+        Waits for fraction of workers to be up
+        
     """
 
-    if type is None:
+    if ctype is None:
         return
-    elif type=="local":
+    elif ctype=="local":
         from dask.distributed import Client, LocalCluster
         dkwargs = dict(n_workers=14, threads_per_worker=1)
         dkwargs.update(**kwargs)
         cluster = LocalCluster(**dkwargs) # these may not be hardcoded
         client = Client(cluster)
-    elif type=="distributed":
+    elif ctype=="distributed":
         from dask_jobqueue import PBSCluster
         from dask.distributed import Client
         assert jobs, "you need to specify a number of dask-queue jobs"
-        cluster = PBSCluster(**kwargs)
+        cluster = PBSCluster(processes=processes, **kwargs)
         cluster.scale(jobs=jobs)
         client = Client(cluster)
 
@@ -551,6 +561,7 @@ def spin_up_cluster(type=None,
             processes = cluster.worker_spec[0]["options"]["processes"]
         
         flag = True
+        start = time()
         while flag:
             wk = client.scheduler_info()["workers"]
             print("Number of workers up = {}".format(len(wk)))
@@ -558,9 +569,24 @@ def spin_up_cluster(type=None,
             if len(wk)>=processes*jobs*fraction:
                 flag = False
                 print("Cluster is up, proceeding with computations")
-
+            now = time()
+            if (now-start)/60>timeout:
+                flag = False
+                print("Timeout: cluster did not spin up, closing")
+                cluster.close()
+                client.close()
+                cluster, client = None, None
+                
     return cluster, client
 
+def dashboard_ssh_forward(client):
+    """ returns the command to execute on a local computer in order to
+    have access to dashboard at the following address in a browser:
+    http://localhost:8787/status
+    """
+    env = os.environ
+    port = client.scheduler_info()["services"]["dashboard"]
+    return f'ssh -N -L {port}:{env["HOSTNAME"]}:8787 {env["USER"]}@datarmor1-10g'
 
 face_connections = {'face': {0: {'X': ((12, 'Y', False), (3, 'X', False)),
               'Y': (None, (1, 'Y', False))},

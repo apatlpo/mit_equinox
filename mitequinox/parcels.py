@@ -1155,9 +1155,13 @@ def browse_log_files(run_dir):
 
 def load_logs(root_dir, run_name):
     """ Browse run and load basic information (global float number, etc ...)
+
     Parameters
-    
-    
+    ----------
+    root_dir: str
+        directory where the run directory is located
+    run_name: str
+        name of run
     """
     dirs = create_dir_tree(root_dir, run_name, 
                            overwrite=False, verbose=False
@@ -1179,15 +1183,11 @@ def load_logs(root_dir, run_name):
     da1 = xr.concat(_D, "step").assign_coords(step=steps)
     #
     _D = []
-    #_S = []
     for step, d in log.items():
-        #if "local_numbers" in d:
         _D.append(xr.DataArray(list(d["local_numbers"].values()), 
                                dims="tile",
                                name="local_numbers"),
                  )
-        #_S.append(step)
-    #da2 = xr.concat(_D, "step").assign_coords(step=_S)
     da2 = xr.concat(_D, "step").assign_coords(step=steps)
     #
     ds = xr.merge([da0, da1, da2])
