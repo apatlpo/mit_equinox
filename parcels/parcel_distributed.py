@@ -1,6 +1,6 @@
 import os, shutil
 import logging
-import traceback
+from time import time
 
 import numpy as np
 import pandas as pd
@@ -11,8 +11,7 @@ import geopandas
 import dask
 from dask.delayed import delayed
 from dask.distributed import performance_report
-
-# from distributed.diagnostics import MemorySampler # requires latest dask ... wait for finishing this production run
+from distributed.diagnostics import MemorySampler 
 
 # try to force flushing of memory
 import gc, ctypes
@@ -33,10 +32,10 @@ root_dir = "/home/datawork-lops-osi/equinox/mit4320/parcels/"
 # run_name = 'debug'
 # run_name = 'global_extra_T365j_dt1j_dij50_new'
 # run_name = 'global_extra_T365j_dt1j_dij50_new_batch'
-run_name = "global_T365j_dt1j_dij50"
+run_name = "global_T365j_dt1j_dij50_new"
 
 # will overwrite existing simulation
-# overwrite = True
+#overwrite = True
 overwrite = False
 
 # simulation parameters
@@ -47,7 +46,7 @@ dt_window = timedelta(days=1.0)
 dt_outputs = timedelta(hours=1.0)
 dt_step = timedelta(hours=1.0)
 dt_seed = 10  # in days
-dt_reboot = timedelta(days=30.0)
+dt_reboot = timedelta(days=20.0)
 
 init_dij = 50  # initial position subsampling compared to llc grid
 
@@ -81,7 +80,7 @@ jobqueuekw = dict(processes=4, cores=4)
 def load_llc():
     """load llc data"""
     ds = ut.load_data(V=["SSU", "SSV", "Eta", "SST", "SSS"])
-    grd = ut.load_grd()[["XC", "YC", "XG", "YG"]]
+    grd = ut.load_grd(V=["XC", "YC", "XG", "YG", "Depth"])
     ds = xr.merge([ds, grd])
     return ds
 
@@ -106,14 +105,14 @@ def generate_tiling(dirs, overwrite):
     return tl
 
 
-def format_info(step, t_start, t_end):
+def format_info(step, t_start, t_end, timer_delta):
     print("-------------------------------------------")
-    str_fmt = "step={}  /  start={}  /  end={}".format(
+    str_fmt = "step={}  /  start={}  /  end={} - elapse={:.1f} min".format(
         step,
         t_start.strftime("%Y-%m-%d %H:%M"),
         t_end.strftime("%Y-%m-%d %H:%M"),
+        timer_delta/60.,
     )
-    print(str_fmt)
     logging.info(str_fmt)
 
 
@@ -136,7 +135,6 @@ def run(dirs, tl, cluster, client):
     # get new log filename for this run
     log_file = pa.name_log_file(dirs["run"])
 
-    # if restart==-1:
     log = pa.browse_log_files(dirs["run"])
     if log:
         restart = max(list(log)) + 1
@@ -162,25 +160,26 @@ def run(dirs, tl, cluster, client):
     step_t = step_t[restart:]
     reboot = int(dt_reboot / dt_window)
     flag_out = False
-    print("reboot={}, len(step_t)={}".format(reboot, len(step_t)))
     logging.info("reboot=%d, len(step_t)=%d", reboot, len(step_t))
     if reboot < len(step_t):
         step_t = step_t[:reboot]
         flag_out = True
 
+    timer_start = time()
     for step, local_t_start in step_t:
 
         local_t_end = local_t_start + dt_window + dt_step
 
         # print step info
-        format_info(step, local_t_start, local_t_end)
+        timer_stop = time()
+        format_info(step, local_t_start, local_t_end, timer_stop-timer_start)
+        timer_start = time()
 
         # load, tile (and store) llc data
         ds_tiles = pa.tile_store_llc(
             ds,
             slice(local_t_start, local_t_end, None),
             tl,
-            netcdf=False,
         )
 
         # seed with more particles
@@ -242,7 +241,6 @@ def run(dirs, tl, cluster, client):
             global_parcel_number,
             global_parcel_number - global_parcel_number0,
         )
-        print(str_fmt)
         logging.info(str_fmt)
 
     return flag_out
@@ -254,7 +252,6 @@ def trim_memory() -> int:
 
 
 def spin_up_cluster(jobs):
-    print("start spinning up dask cluster, jobs={}".format(jobs))
     logging.info("start spinning up dask cluster, jobs={}".format(jobs))
     cluster, client = ut.spin_up_cluster(
         "distributed",
@@ -268,18 +265,15 @@ def spin_up_cluster(jobs):
 
 
 def close_dask(cluster, client):
-    print("starts closing dask cluster ...")
     logging.info("starts closing dask cluster ...")
     try:
         cluster.close()
     except:
-        print("cluster.close failed ")
         logging.exception("cluster.close failed ...")
     # manually kill pbs jobs
     manual_kill_jobs()
     # close client
     client.close()
-    print("... done")
     logging.info("... done")
 
 
@@ -297,10 +291,8 @@ def manual_kill_jobs():
     for line in output.splitlines():
         lined = line.decode("UTF-8")
         if username in lined and "dask" in lined:
-            # print(lined)
             pid = lined.split(".")[0]
             bashCommand = "qdel " + str(pid)
-            print(bashCommand)
             logging.info(" " + bashCommand)
             try:
                 boutput = subprocess.check_output(bashCommand, shell=True)
@@ -312,52 +304,38 @@ def manual_kill_jobs():
 def main():
 
     # create run directory tree
-    print("1 - create_dir_tree")
     logging.info("1 - create_dir_tree")
     dirs = pa.create_dir_tree(root_dir, run_name, overwrite=overwrite)
 
     # create tiling
-    print("2 - generate_tiling")
     logging.info("2 - generate_tiling")
     tl = generate_tiling(dirs, overwrite)
 
     # create run directories, erase them if need be
-    print("3 - create_tile_run_tree")
     logging.info("3 - create_tile_run_tree")
-    # _overwrite=False
-    # if restart==0 and overwrite:
-    #    _overwrite = True
     tl.create_tile_run_tree(dirs["run"], overwrite=overwrite)
 
-    print("4 - start main loop")
     logging.info("4 - start main loop")
 
     flag = True
     reboot = 0
     while flag:
 
-        print(" ------------- reboot {} ------------- ".format(reboot))
         logging.info("--- reboot %d", reboot)
 
         # sping up cluster
         cluster, client = spin_up_cluster(dask_jobs)
-        # cluster, client = None, None
         print(cluster)
 
         # run parcels simulation
-        # ms = MemorySampler()
-        with performance_report(filename=f"dask-report-{reboot}.html"):
+        ms = MemorySampler()
+        with performance_report(filename=f"dask-report-{reboot}.html"), ms.sample(f"reboot{reboot}"):
             flag = run(dirs, tl, cluster, client)
-        # with performance_report(filename=f"dask-report-{reboot}.html"), ms.sample(f"reboot{reboot}")
-        # MemorySampler requires latest dask ... wait for finishing this production run
         # https://distributed.dask.org/en/latest/diagnosing-performance.html#analysing-memory-usage-over-time
-        # ms.to_pandas().to_netcdf ...
+        ms.to_pandas().to_csv(f"dask-memory-report-{reboot}.csv")
 
         # close dask
         close_dask(cluster, client)
-
-        # if reboot>10:
-        #    flag=False
 
         reboot += 1
 
@@ -388,5 +366,4 @@ if __name__ == "__main__":
     main()
     # debug()
 
-    print("- all done")
     logging.info("- all done")

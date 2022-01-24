@@ -50,6 +50,6 @@ jlab.pbs.o*
 
 # specific data 
 sandbox/data
-parcels/run_*
+run_*
 log
 

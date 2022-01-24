@@ -582,11 +582,16 @@ def generate_randomly_located_data(lon=(0, 180), lat=(0, 90), N=1000):
     return geopandas.GeoSeries(points, crs=crs_wgs84)
 
 
-def tile_store_llc(ds, time_slice, tl, persist=False, netcdf=False):
+def tile_store_llc(ds, 
+                   time_slice, 
+                   tl, 
+                   persist=False, 
+                   netcdf=False,
+                   coords = ["XG", "YG", "Depth"],
+                   variables = ["SSU", "SSV", "Eta", "SST", "SSS"],
+                  ):
     """Process llc dataset and extract tile only relevant data"""
     # extract time slice for dt_window
-    coords = ["XG", "YG", "Depth"]  # "XC", "YC",
-    variables = ["SSU", "SSV", "Eta", "SST", "SSS"]
     ds_tsubset = ds.sel(time=time_slice).reset_coords()[coords + variables]
     # convert faces structure to global lat/lon structure
     if "face" in ds_tsubset.dims:
@@ -731,15 +736,15 @@ class run(object):
         }
         #    "waterdepth": {"lon": "XC", "lat": "YC"},
         if self.pclass == "extended":
-            variables.update(
-                {"sea_level": "Eta", "temperature": "SST", "salinity": "SSS"}
+            variables.update(sea_level="Eta",
+                             temperature="SST",
+                             salinity="SSS",
+                             waterdepth="Depth",
             )
-            dims.update(
-                {
-                    "sea_level": _standard_dims,
-                    "temperature": _standard_dims,
-                    "salinity": _standard_dims,
-                }
+            dims.update(sea_level=_standard_dims,
+                        temperature=_standard_dims,
+                        salinity=_standard_dims,
+                        waterdepth=dict(lon="XG", lat="YG"),
             )
         if netcdf:
             fieldset = FieldSet.from_netcdf(
@@ -890,7 +895,9 @@ class run(object):
         else:
             adv = AdvectionRK4
         if self.pclass == "extended":
-            kernel = Extended_Sample + pset.Kernel(adv)
+            # order matter in the sum below, see
+            # https://github.com/OceanParcels/parcels/issues/1122
+            kernel =  pset.Kernel(adv) + Extended_Sample
         else:
             kernel = adv
 
@@ -970,24 +977,31 @@ class Particle_extended(JITParticle):
     sea_level = Variable("sea_level", dtype=np.float32)
     temperature = Variable("temperature", dtype=np.float32)
     salinity = Variable("salinity", dtype=np.float32)
+    #
+    waterdepth = Variable("waterdepth", dtype=np.float32)
 
 
 def Extended_Sample(particle, fieldset, time):
+    """ Custom sampling, see more details at:
+    https://github.com/OceanParcels/parcels/issues/1122
+    """
     particle.zonal_velocity, particle.meridional_velocity = fieldset.UV[
-        time, particle.depth, particle.lat, particle.lon
+        time+particle.dt, particle.depth, particle.lat, particle.lon
     ]
-    # particle.zonal_velocity = fieldset.U[time, particle.depth, particle.lat, particle.lon]
-    # particle.meridional_velocity = fieldset.V[time, particle.depth, particle.lat, particle.lon]
     #
     particle.sea_level = fieldset.sea_level[
-        time, particle.depth, particle.lat, particle.lon
+        time+particle.dt, particle.depth, particle.lat, particle.lon
     ]
     particle.temperature = fieldset.temperature[
-        time, particle.depth, particle.lat, particle.lon
+        time+particle.dt, particle.depth, particle.lat, particle.lon
     ]
     particle.salinity = fieldset.salinity[
+        time+particle.dt, particle.depth, particle.lat, particle.lon
+    ]
+    particle.waterdepth = fieldset.waterdepth[
         time, particle.depth, particle.lat, particle.lon
     ]
+    # it is strange that we have to provide dimensions that are not in original dataset
 
 
 # Make sure to remove the floats that start on land

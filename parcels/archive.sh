@@ -13,7 +13,7 @@ mkdir $DIR
 
 grep GMT parcel_distributed.pbs.o*
 
-mv dask-worker.o* parcel_distributed.pbs.o* distributed.log dask-report-* $DIR
+mv dask-worker.o* parcel_distributed.pbs.o* distributed.log dask-report-* dask-memory*.csv $DIR
 
 
 
