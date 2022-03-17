@@ -5,12 +5,12 @@ Download Miniconda3 (i.e. for python3) from the [conda website](https://conda.io
 bash Miniconda3-latest-Linux-x86_64.sh
 bash
 conda update conda
-conda create -n equinox -c conda-forge python=3.8 dask-jobqueue \
-            xarray zarr netcdf4 python-graphviz \
-            fastparquet pyarrow \
-            tqdm \
+# edit ~/.condarc as described below
+conda create -n equinox -c conda-forge python=3.8 tqdm \
+            dask-jobqueue xarray zarr netcdf4 python-graphviz \
+            fastparquet pyarrow bottleneck \
             jupyterlab ipywidgets \
-            cartopy geopandas descartes \
+            cartopy geopandas descartes xesmf \
             scikit-learn seaborn \
             hvplot geoviews datashader nodejs \
             intake-xarray gcsfs \
@@ -23,7 +23,6 @@ conda activate equinox
 
 #conda install -c conda-forge xgcm xmitgcm
 pip install git+https://github.com/xgcm/xgcm.git
-#conda install -c conda-forge xgcm
 pip install git+https://github.com/MITgcm/xmitgcm.git
 pip install git+https://github.com/xgcm/xrft.git
 
@@ -39,6 +38,7 @@ pip install -e .
 #conda install -c fbriol pyfes
 
 conda install pywavelets
+
 pip install git+git://github.com/psf/black
 
 cd mit_equinox; pip install -e .
@@ -68,6 +68,15 @@ python -m ipykernel install --user --name equinox --display-name "EQUINOX mit pr
 Uninstall library after `pip install -e .`:
 - remove the egg file ( `print(distributed.__file__)` for example)
 - from file `easy-install.pth`, remove the corresponding line (it should be a path to the source directory or of an egg file).
+
+It is recommended to have a `~/.condarc` file with (see [geopandas install bugs](https://github.com/conda-forge/geopandas-feedstock/issues/48)):
+
+```
+channel_priority: strict
+channels:
+  - conda-forge
+  - defaults
+```
 
 # General information about miniconda:
 

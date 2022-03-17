@@ -582,10 +582,10 @@ def generate_randomly_located_data(lon=(0, 180), lat=(0, 90), N=1000):
     return geopandas.GeoSeries(points, crs=crs_wgs84)
 
 
-def tile_store_llc(ds, 
-                   time_slice, 
-                   tl, 
-                   persist=False, 
+def tile_store_llc(ds,
+                   time_slice,
+                   tl,
+                   persist=False,
                    netcdf=False,
                    coords = ["XG", "YG", "Depth"],
                    variables = ["SSU", "SSV", "Eta", "SST", "SSS"],
@@ -764,8 +764,23 @@ class run(object):
             )
         self.fieldset = fieldset
 
-    def init_particles(self, ds, dij, debug=None):
-        """Initial particle positions"""
+    def init_particles(self, ds, dij, uplet=None, debug=None):
+        """Initial particle positions
+
+        Parameters
+        ----------
+        ds: xr.Dataset
+            dataset containing the model grid ("XG", "YG")
+        dij: int
+            particle separation in grid indices
+        uplet: tuple, optional
+            (number of particles, radius) defining the number of particles
+            released at each location along with a radius (degrees)
+                - radius>0 : parcels are on the circle
+                - radius<0 : parcels are randomly distributed
+        debug: boolean, optional
+
+        """
         tile, tl, fieldset = self.tile, self.tl, self.fieldset
 
         # first step, create drifters positions
@@ -782,6 +797,8 @@ class run(object):
         xv, yv = xv[in_tile[in_tile == tile].index], yv[in_tile[in_tile == tile].index]
         # store initial positions along with relevant surounding area
         # will be store in the first file, just need a mechanism to read them back
+        if uplet is not None:
+            xv, yv = _spread_parcels(xv, yv, *uplet)
         #
         pset = None
         if xv.size > 0:
@@ -957,6 +974,20 @@ class run(object):
     def close(self):
         del self.pset
 
+def _spread_parcels(x, y, num, radius):
+    """ create n-uplets of particles around x,y positions
+    """
+    x, y = x.flatten(), y.flatten()
+    x_out, y_out = np.empty(x.size), np.empty(x.size)
+    scale = 1/np.cos(y * np.pi / 180)
+    assert radius>0, "Random parcel distribution (radius<0) is not implemented yet"
+    for i in range(num):
+        exp = np.exp(1j*i/num*2*np.pi)
+        dx = np.real(exp)*radius
+        dy = np.imag(exp)*radius/scale
+        x_out[::num] = x + dx
+        y_out[::num] = y + dy
+    return x_out, y_out
 
 def _get_particle_class(pclass):
     # if pclass=="llc":
@@ -1036,6 +1067,7 @@ def step_window(
     tl,
     ds_tile=None,
     init_dij=10,
+    init_uplet=None,
     parcels_remove_on_land=True,
     pclass="jit",
     id_max=None,
@@ -1064,10 +1096,11 @@ def step_window(
         ds_tile: list of xarray.Dataset
             tiled llc data
         init_dij: int, optional
+        init_uplet: tuple, optional
         parcels_remove_on_land: boolean, optional
         pclass: str, optional
         id_max: int, optional
-        seed:
+        seed: boolean, optional
         verbose: int, optional
         debug: int, optional
 
@@ -1105,7 +1138,7 @@ def step_window(
 
         # load drifter positions
         if step == 0:
-            prun.init_particles(ds, init_dij)
+            prun.init_particles(ds, init_dij, uplet=init_uplet)
         else:
             prun.init_particles_restart(seed)
         if debug == 2:

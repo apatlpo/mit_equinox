@@ -11,7 +11,7 @@ import geopandas
 import dask
 from dask.delayed import delayed
 from dask.distributed import performance_report
-from distributed.diagnostics import MemorySampler 
+from distributed.diagnostics import MemorySampler
 
 # try to force flushing of memory
 import gc, ctypes
@@ -28,27 +28,25 @@ root_dir = "/home/datawork-lops-osi/equinox/mit4320/parcels/"
 # root_dir = '/home1/datawork/slgentil/parcels/'
 
 # 5x5 tiles dij=100 T=365 5jobs x 5workers
-# run_name = 'global_T365j_dt1j_dij50'
-# run_name = 'debug'
-# run_name = 'global_extra_T365j_dt1j_dij50_new'
-# run_name = 'global_extra_T365j_dt1j_dij50_new_batch'
-run_name = "global_T365j_dt1j_dij50_new"
+run_name = "global_dij2_up3"
 
 # will overwrite existing simulation
-#overwrite = True
-overwrite = False
+overwrite = True
+#overwrite = False
 
 # simulation parameters
 
-T = 360  # length of the total run [days]
+#T = 360  # length of the total run [days]
+T = 5  # length of the total run [days]
 
 dt_window = timedelta(days=1.0)
 dt_outputs = timedelta(hours=1.0)
 dt_step = timedelta(hours=1.0)
-dt_seed = 10  # in days
+dt_seed = 0  # in days
 dt_reboot = timedelta(days=20.0)
 
-init_dij = 50  # initial position subsampling compared to llc grid
+init_dij = 2  # initial position subsampling compared to llc grid
+init_uplet = (3, 2./111.) # initial number of parcels at each release location
 
 # number of dask jobs launched for parcels simulations
 dask_jobs = 12
@@ -183,7 +181,10 @@ def run(dirs, tl, cluster, client):
         )
 
         # seed with more particles
-        seed = (local_t_start - t_start).days % dt_seed == 0
+        if dt_seed>0:
+            seed = (local_t_start - t_start).days % dt_seed == 0
+        else:
+            seed = False
 
         global_parcel_number0 = global_parcel_number
 
@@ -199,6 +200,7 @@ def run(dirs, tl, cluster, client):
                 tl,
                 ds_tile=ds_tiles[tile],
                 init_dij=init_dij,
+                init_uplet=init_uplet,
                 parcels_remove_on_land=True,
                 pclass="extended",
                 id_max=max_ids[tile],
