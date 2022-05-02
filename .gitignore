@@ -1,5 +1,6 @@
 hw/datarmor/run*/
 hal/lib_install_proxy.md
+parcel_distributed.pbs.o*
 
 clean~
 clean

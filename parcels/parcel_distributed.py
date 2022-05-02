@@ -10,7 +10,7 @@ import geopandas
 
 import dask
 from dask.delayed import delayed
-from dask.distributed import performance_report
+from dask.distributed import performance_report, wait
 from distributed.diagnostics import MemorySampler
 
 # try to force flushing of memory
@@ -28,7 +28,7 @@ root_dir = "/home/datawork-lops-osi/equinox/mit4320/parcels/"
 # root_dir = '/home1/datawork/slgentil/parcels/'
 
 # 5x5 tiles dij=100 T=365 5jobs x 5workers
-run_name = "global_dij2_up3"
+run_name = "global_dij4_up3_3h" # not going through with dij2 but may be related to bug
 
 # will overwrite existing simulation
 overwrite = True
@@ -39,18 +39,23 @@ overwrite = True
 #T = 360  # length of the total run [days]
 T = 5  # length of the total run [days]
 
-dt_window = timedelta(days=1.0)
+#dt_window = timedelta(days=1.0)
+#dt_window = timedelta(hours=12)
+dt_window = timedelta(hours=3)
 dt_outputs = timedelta(hours=1.0)
 dt_step = timedelta(hours=1.0)
+#dt_seed = 10  # in days
 dt_seed = 0  # in days
-dt_reboot = timedelta(days=20.0)
+dt_reboot = timedelta(days=10.0)
 
-init_dij = 2  # initial position subsampling compared to llc grid
+init_dij = 4  # initial position subsampling compared to llc grid
+#init_dij = 20  # initial position subsampling compared to llc grid
 init_uplet = (3, 2./111.) # initial number of parcels at each release location
 
 # number of dask jobs launched for parcels simulations
 dask_jobs = 12
-jobqueuekw = dict(processes=4, cores=4)
+#jobqueuekw = dict(processes=4, cores=4)
+jobqueuekw = dict(processes=16, cores=16)
 
 # following is not allowed on datarmor:
 # dask_jobs = 12*4
@@ -92,7 +97,8 @@ def generate_tiling(dirs, overwrite):
         logging.info("creates and store tiling")
         # create tiling
         grd = ut.load_grd()[["XC", "YC", "XG", "YG"]].reset_coords().persist()
-        tl = pa.tiler(ds=grd, factor=(5, 10), overlap=(250, 250))
+        #tl = pa.tiler(ds=grd, factor=(5, 10), overlap=(250, 250))
+        tl = pa.tiler(ds=grd, factor=(10, 20), overlap=(150, 150)) # debug
         # store tiler
         tl.store(dirs["tiling"])
     else:
@@ -178,7 +184,10 @@ def run(dirs, tl, cluster, client):
             ds,
             slice(local_t_start, local_t_end, None),
             tl,
+            persist=True,
         )
+        _ = wait(ds_tiles)
+        logging.debug("llc data persisted")
 
         # seed with more particles
         if dt_seed>0:
@@ -209,6 +218,7 @@ def run(dirs, tl, cluster, client):
             for tile in range(tl.N_tiles)
         ]
         try:
+            logging.debug("launching step_window distribution")
             dsteps_out = dask.compute(*dsteps)
             # force even distribution amongst workers
             # dsteps_out = client.compute(dsteps, sync=True) # this is not working at the moment
@@ -356,7 +366,8 @@ if __name__ == "__main__":
     # to file
     logging.basicConfig(
         filename="distributed.log",
-        level=logging.INFO,
+        #level=logging.INFO,
+        level=logging.DEBUG,
     )
     # level order is: DEBUG, INFO, WARNING, ERROR
     # encoding='utf-8', # available only in latests python versions

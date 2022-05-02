@@ -3,6 +3,7 @@ from glob import glob
 import yaml
 import pickle
 import gc
+import logging
 
 from itertools import product
 from tqdm import tqdm
@@ -797,11 +798,11 @@ class run(object):
         xv, yv = xv[in_tile[in_tile == tile].index], yv[in_tile[in_tile == tile].index]
         # store initial positions along with relevant surounding area
         # will be store in the first file, just need a mechanism to read them back
-        if uplet is not None:
-            xv, yv = _spread_parcels(xv, yv, *uplet)
         #
         pset = None
         if xv.size > 0:
+            if uplet is not None:
+                xv, yv = _spread_parcels(xv, yv, *uplet)
             self.particle_class.setLastID(0)
             pset = ParticleSet(
                 fieldset=fieldset,
@@ -844,7 +845,9 @@ class run(object):
                     restart=True,
                     restarttime=np.datetime64(self.starttime),
                 )
+                logging.info(f" tile {self.tile} run: {_tile} tile nc loaded - {ncfile} ")
                 df = pd.read_csv(self.csv(step=self.step - 1, tile=_tile), index_col=0)
+                logging.info(f" tile {self.tile} run: {_tile} tile csv loaded")
                 df_not_in_tile = df.loc[df["tile"] != tile]
                 if df_not_in_tile.size > 0:
                     boolind = np.array(
@@ -857,7 +860,7 @@ class run(object):
                 if _pset.size > 0:
                     pset.add(_pset)
 
-        # could add particle here based on density
+        # add particle here based on initial positions
         ncfile = self.nc(step=0)
         if seed and os.path.isfile(ncfile):
             # load initial parcel position for this tile and compute parcel separation
@@ -978,15 +981,15 @@ def _spread_parcels(x, y, num, radius):
     """ create n-uplets of particles around x,y positions
     """
     x, y = x.flatten(), y.flatten()
-    x_out, y_out = np.empty(x.size), np.empty(x.size)
+    x_out, y_out = np.empty(x.size*num), np.empty(x.size*num)
     scale = 1/np.cos(y * np.pi / 180)
     assert radius>0, "Random parcel distribution (radius<0) is not implemented yet"
     for i in range(num):
         exp = np.exp(1j*i/num*2*np.pi)
         dx = np.real(exp)*radius
-        dy = np.imag(exp)*radius/scale
-        x_out[::num] = x + dx
-        y_out[::num] = y + dy
+        dy = np.imag(exp)*radius*scale
+        x_out[i::num] = x + dx
+        y_out[i::num] = y + dy
     return x_out, y_out
 
 def _get_particle_class(pclass):
@@ -1117,7 +1120,8 @@ def step_window(
             # read netcdf file
             llc = os.path.join(tile_dir, "llc.nc")
             ds = xr.open_dataset(llc, chunks={"time": 1})
-
+        logging.info(f" tile {tile}: ds is here")
+        
         # init run object
         prun = run(
             tile,
@@ -1133,6 +1137,7 @@ def step_window(
             verbose=verbose,
             pclass=pclass,
         )
+        logging.info(f"tile {tile} : run object inited")
         if debug == 1:
             return prun, ds
 
@@ -1143,6 +1148,7 @@ def step_window(
             prun.init_particles_restart(seed)
         if debug == 2:
             return prun
+        logging.info(f"tile {tile} : particles inited")
 
         # if parcels_remove_on_land and prun.pset.size>0:
         if parcels_remove_on_land and prun.pset is not None:
@@ -1155,8 +1161,10 @@ def step_window(
         # 2.88 s for 10x10 tiles and dij=10
         if debug == 3:
             return prun
+        logging.info(f"tile {tile} : land particles removed")
 
         # perform the parcels simulation
+        logging.info(f"tile {tile} : launching parcel runs")
         prun.execute()
 
         # extract useful information
@@ -1168,6 +1176,7 @@ def step_window(
 
         # clean up
         prun.close()
+        logging.info(f"tile {tile} : closing prun")
 
         return parcel_number, id_max
 
