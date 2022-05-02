@@ -126,6 +126,9 @@ class tiler(object):
             self._load(tile_dir)
         else:
             assert False, "Either ds or tile_dir are required."
+        # TODO / uplet debug : generate neighboor dict
+        #   may use i, j indices directly
+        # self.generate_neighboors()
         self.crs_wgs84 = crs_wgs84
         self.N_extra = N_extra
 
@@ -186,6 +189,9 @@ class tiler(object):
         )
         tiles = list(product(tiles_1d["i"], tiles_1d["j"]))
         boundaries = list(product(boundaries_1d["i"], boundaries_1d["j"]))
+
+        # TODO / uplet debug : filter out land tiles
+        #   - keep "Depth" along with "XG", "YG" in ds
         N_tiles = len(tiles)
 
         #    d: [ds.isel(i=s[0], j=s[1], i_g=s[0], j_g=s[1]) for s in slices]
@@ -815,7 +821,7 @@ class run(object):
         if pset is not None:
             if pset.size > 0:
                 pset.collection.data["id"] = pset.collection.data["id"] + int(
-                    tile * 1e6
+                    tile * 1e6      # TODO / uplet debug: is 1e6 enough ?
                 )
             # initial value of id_max
             self.id_max = max(pset.collection.data["id"])
@@ -832,6 +838,8 @@ class run(object):
         # load parcel file from previous runs
         self.particle_class.setLastID(0)
         pset = ParticleSet(fieldset=self.fieldset, pclass=self.particle_class)
+        # TODO / uplet debug : only search within neighbooring tiles
+        # for _tile in tl.neighboors[tile]:  # where neighboors is a dict
         for _tile in range(tl.N_tiles):
             ncfile = self.nc(step=self.step - 1, tile=_tile)
             if os.path.isfile(ncfile):
@@ -845,9 +853,9 @@ class run(object):
                     restart=True,
                     restarttime=np.datetime64(self.starttime),
                 )
-                logging.info(f" tile {self.tile} run: {_tile} tile nc loaded - {ncfile} ")
+                logging.debug(f" tile {self.tile} run: {_tile} tile nc loaded - {ncfile} ")
                 df = pd.read_csv(self.csv(step=self.step - 1, tile=_tile), index_col=0)
-                logging.info(f" tile {self.tile} run: {_tile} tile csv loaded")
+                logging.debug(f" tile {self.tile} run: {_tile} tile csv loaded")
                 df_not_in_tile = df.loc[df["tile"] != tile]
                 if df_not_in_tile.size > 0:
                     boolind = np.array(
@@ -1121,7 +1129,7 @@ def step_window(
             llc = os.path.join(tile_dir, "llc.nc")
             ds = xr.open_dataset(llc, chunks={"time": 1})
         logging.info(f" tile {tile}: ds is here")
-        
+
         # init run object
         prun = run(
             tile,

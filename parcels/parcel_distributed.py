@@ -34,34 +34,47 @@ run_name = "global_dij4_up3_3h" # not going through with dij2 but may be related
 overwrite = True
 #overwrite = False
 
-# simulation parameters
+### simulation parameters
 
-#T = 360  # length of the total run [days]
-T = 5  # length of the total run [days]
+## base case
 
-#dt_window = timedelta(days=1.0)
-#dt_window = timedelta(hours=12)
-dt_window = timedelta(hours=3)
+T = 360  # length of the total run [days]
+
+dt_window = timedelta(days=1.0)
 dt_outputs = timedelta(hours=1.0)
 dt_step = timedelta(hours=1.0)
-#dt_seed = 10  # in days
-dt_seed = 0  # in days
-dt_reboot = timedelta(days=10.0)
+dt_seed = 10  # in days, base choice
+dt_reboot = timedelta(days=20.0)
 
-init_dij = 4  # initial position subsampling compared to llc grid
-#init_dij = 20  # initial position subsampling compared to llc grid
-init_uplet = (3, 2./111.) # initial number of parcels at each release location
+init_dij = 50  # initial position subsampling compared to llc grid
+
+pclass = "extended" # TODO / uplet debug : do not interpolate all fields
+# but pclass = "jit" may be broken
 
 # number of dask jobs launched for parcels simulations
 dask_jobs = 12
-#jobqueuekw = dict(processes=4, cores=4)
-jobqueuekw = dict(processes=16, cores=16)
+jobqueuekw = dict(processes=4, cores=4)
 
 # following is not allowed on datarmor:
 # dask_jobs = 12*4
 # jobqueuekw=dict(processes=1, cores=1, memory="30GB",
 #                resource_spec="select=1:ncpus=6:mem=30GB",
 #               )
+
+## uplet case
+
+T = 5  # length of the total run [days]
+
+dt_window = timedelta(hours=3)
+dt_seed = 0  # in days
+
+init_dij = 4  # initial position subsampling compared to llc grid
+init_uplet = (3, 2./111.) # initial number of parcels at each release location
+
+pclass = "extended"  #
+
+#jobqueuekw = dict(processes=16, cores=16) # uplet debug
+
 
 # dev !!
 # dt_reboot = timedelta(days=2.)
@@ -98,7 +111,7 @@ def generate_tiling(dirs, overwrite):
         # create tiling
         grd = ut.load_grd()[["XC", "YC", "XG", "YG"]].reset_coords().persist()
         #tl = pa.tiler(ds=grd, factor=(5, 10), overlap=(250, 250))
-        tl = pa.tiler(ds=grd, factor=(10, 20), overlap=(150, 150)) # debug
+        tl = pa.tiler(ds=grd, factor=(10, 20), overlap=(150, 150)) # uplet debug : reduce size of tiles and decrease overlap
         # store tiler
         tl.store(dirs["tiling"])
     else:
@@ -211,7 +224,7 @@ def run(dirs, tl, cluster, client):
                 init_dij=init_dij,
                 init_uplet=init_uplet,
                 parcels_remove_on_land=True,
-                pclass="extended",
+                pclass=pclass,
                 id_max=max_ids[tile],
                 seed=seed,
             )
@@ -219,7 +232,10 @@ def run(dirs, tl, cluster, client):
         ]
         try:
             logging.debug("launching step_window distribution")
-            dsteps_out = dask.compute(*dsteps)
+            #dsteps_out = dask.compute(*dsteps)
+            dsteps_out = dask_compute_batch(dsteps, client) # TODO / uplet debug : launch in batches to use less workers
+            # batch computation may not be functional yet
+
             # force even distribution amongst workers
             # dsteps_out = client.compute(dsteps, sync=True) # this is not working at the moment
             # http://distributed.dask.org/en/stable/locality.html#specify-workers-with-compute-persist
@@ -312,6 +328,22 @@ def manual_kill_jobs():
                 # print(e.output.decode())
                 pass
 
+def dask_compute_batch(computations, client, batch_size=None):
+    """ breaks down a list of computations into batches
+    """
+    # compute batch size according to number of workers
+    if batch_size is None:
+        batch_size = len(client.scheduler_info()["workers"])
+    # find batch indices
+    total_range = range(len(computations))
+    splits = max(1, np.ceil(len(total_range)/batch_size))
+    batches = np.array_split(total_range, splits)
+    # launch computations
+    outputs = []
+    for b in batches:
+        out = dask.compute(*computations[slice(b[0], b[-1]+1)])
+        outputs = outputs + out
+    return outputs
 
 def main():
 
