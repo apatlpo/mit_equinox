@@ -46,13 +46,14 @@ dt_step = timedelta(hours=1.0)
 dt_seed = 10  # in days, base choice
 dt_reboot = timedelta(days=20.0)
 
+tile_size = dict(factor=(5, 10), overlap=(250, 250))
 init_dij = 50  # initial position subsampling compared to llc grid
 
 pclass = "extended" # TODO / uplet debug : do not interpolate all fields
-# but pclass = "jit" may be broken
+# but pclass = "jit" may be broken, maybe not
 
 # number of dask jobs launched for parcels simulations
-dask_jobs = 12
+dask_jobs = 12 # 13?
 jobqueuekw = dict(processes=4, cores=4)
 
 # following is not allowed on datarmor:
@@ -68,10 +69,11 @@ T = 5  # length of the total run [days]
 dt_window = timedelta(hours=3)
 dt_seed = 0  # in days
 
-init_dij = 4  # initial position subsampling compared to llc grid
+tile_size = dict(factor=(10, 20), overlap=(150, 150)) # reduce size of tiles and decrease overlap
+#init_dij = 4  # initial position subsampling compared to llc grid
 init_uplet = (3, 2./111.) # initial number of parcels at each release location
 
-pclass = "extended"  #
+pclass = "jit"  # uplet debug
 
 #jobqueuekw = dict(processes=16, cores=16) # uplet debug
 
@@ -110,8 +112,7 @@ def generate_tiling(dirs, overwrite):
         logging.info("creates and store tiling")
         # create tiling
         grd = ut.load_grd()[["XC", "YC", "XG", "YG"]].reset_coords().persist()
-        #tl = pa.tiler(ds=grd, factor=(5, 10), overlap=(250, 250))
-        tl = pa.tiler(ds=grd, factor=(10, 20), overlap=(150, 150)) # uplet debug : reduce size of tiles and decrease overlap
+        tl = pa.tiler(ds=grd, **tile_size)
         # store tiler
         tl.store(dirs["tiling"])
     else:
