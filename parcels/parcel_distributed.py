@@ -24,8 +24,8 @@ step_window_delayed = delayed(pa.step_window)
 # ---- Run parameters
 
 # root_dir = '/home1/scratch/aponte/parcels/'
-root_dir = "/home/datawork-lops-osi/equinox/mit4320/parcels/"
-# root_dir = '/home1/datawork/slgentil/parcels/'
+# root_dir = "/home/datawork-lops-osi/equinox/mit4320/parcels/"
+root_dir = '/home1/scratch/slgentil/parcels/'
 
 # 5x5 tiles dij=100 T=365 5jobs x 5workers
 run_name = "global_dij4_up3_3h" # not going through with dij2 but may be related to bug
@@ -38,22 +38,28 @@ overwrite = True
 
 ## base case
 
-T = 360  # length of the total run [days]
+# T = 360  # length of the total run [days]
+T = 2  # length of the total run [days]
 
 dt_window = timedelta(days=1.0)
 dt_outputs = timedelta(hours=1.0)
 dt_step = timedelta(hours=1.0)
-dt_seed = 10  # in days, base choice
+# dt_seed = 10  # in days, base choice
+dt_seed = 0  # in days, base choice
 dt_reboot = timedelta(days=20.0)
 
 tile_size = dict(factor=(5, 10), overlap=(250, 250))
-init_dij = 50  # initial position subsampling compared to llc grid
+# init_dij = 50  # initial position subsampling compared to llc grid
+init_dij = 100  # initial position subsampling compared to llc grid
+init_uplet = None # one number of parcels at each release location
 
 pclass = "extended" # TODO / uplet debug : do not interpolate all fields
 # but pclass = "jit" may be broken, maybe not
 
 # number of dask jobs launched for parcels simulations
-dask_jobs = 12 # 13?
+# dask_jobs = 12 # 13?
+# jobqueuekw = dict(processes=4, cores=4)
+dask_jobs = 5 
 jobqueuekw = dict(processes=4, cores=4)
 
 # following is not allowed on datarmor:
@@ -64,16 +70,16 @@ jobqueuekw = dict(processes=4, cores=4)
 
 ## uplet case
 
-T = 5  # length of the total run [days]
+# T = 5  # length of the total run [days]
 
-dt_window = timedelta(hours=3)
-dt_seed = 0  # in days
+# dt_window = timedelta(hours=3)
+# dt_seed = 0  # in days
 
-tile_size = dict(factor=(10, 20), overlap=(150, 150)) # reduce size of tiles and decrease overlap
-#init_dij = 4  # initial position subsampling compared to llc grid
-init_uplet = (3, 2./111.) # initial number of parcels at each release location
+# tile_size = dict(factor=(10, 20), overlap=(150, 150)) # reduce size of tiles and decrease overlap
+# init_dij = 4  # initial position subsampling compared to llc grid
+# init_uplet = (3, 2./111.) # initial number of parcels at each release location
 
-pclass = "jit"  # uplet debug
+# pclass = "jit"  # uplet debug
 
 #jobqueuekw = dict(processes=16, cores=16) # uplet debug
 
@@ -198,7 +204,7 @@ def run(dirs, tl, cluster, client):
             ds,
             slice(local_t_start, local_t_end, None),
             tl,
-            persist=True,
+            persist=False,
         )
         _ = wait(ds_tiles)
         logging.debug("llc data persisted")
@@ -249,8 +255,8 @@ def run(dirs, tl, cluster, client):
 
         # try to manually clean up memory
         # https://coiled.io/blog/tackling-unmanaged-memory-with-dask/
-        client.run(gc.collect)
-        client.run(trim_memory)  # should not be done systematically
+        # client.run(gc.collect)
+        # client.run(trim_memory)  # should not be done systematically
 
         # update number of global number of drifters and maximum ids for each tiles
         _local_numbers = list(zip(*dsteps_out))[0]
@@ -289,6 +295,7 @@ def spin_up_cluster(jobs):
         walltime="06:00:00",
         **jobqueuekw,
     )
+    
     logging.info("dashboard via ssh: " + ut.dashboard_ssh_forward(client))
     return cluster, client
 
@@ -343,8 +350,14 @@ def dask_compute_batch(computations, client, batch_size=None):
     outputs = []
     for b in batches:
         out = dask.compute(*computations[slice(b[0], b[-1]+1)])
-        outputs = outputs + out
-    return outputs
+        outputs.append(out)
+        
+        # try to manually clean up memory
+        # https://coiled.io/blog/tackling-unmanaged-memory-with-dask/
+        client.run(gc.collect)
+        client.run(trim_memory)  # should not be done systematically
+        
+    return sum(outputs, ())
 
 def main():
 

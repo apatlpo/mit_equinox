@@ -128,10 +128,34 @@ class tiler(object):
             assert False, "Either ds or tile_dir are required."
         # TODO / uplet debug : generate neighboor dict
         #   may use i, j indices directly
-        # self.generate_neighboors()
+        self.generate_neighboors()
+        
         self.crs_wgs84 = crs_wgs84
         self.N_extra = N_extra
 
+    def generate_neighboors(self):
+        """
+        search neighbours for each tile.
+        """
+        ni,nj=self.factor
+        ntiles=self.N_tiles
+        neighbours={}
+        for n in range(ntiles):
+            neighbours[n] = [n]
+            ndict={}
+            ndict['S'] = n-1 if n%nj!=0 else None
+            ndict['SE'] = (n-1+nj)%ntiles if n%nj!=0 else None
+            ndict['E'] = (n+nj)%ntiles
+            ndict['NE'] = (n+1+nj)%ntiles if (n+1)%nj!=0 else None
+            ndict['N'] = n+1 if (n+1)%nj!=0 else None
+            ndict['NO'] = (n+1-nj)%ntiles if (n+1)%nj!=0 else None
+            ndict['O'] = (n-nj)%ntiles
+            ndict['SO'] = (n-1-nj)%ntiles  if n%nj!=0 else None
+            for k,v in ndict.items():
+                if ndict[k] is not None: neighbours[n].append(ndict[k]) 
+        self.neighbours = neighbours
+
+        
     def _build(self, ds, factor, overlap, N_extra, projection=None):
         """Actually generates the horizontal tiling
 
@@ -255,9 +279,11 @@ class tiler(object):
             "crs_strings",
             "S",
             "G",
+            "factor",               # for searching neighbours
         ]
         for v in V:
             setattr(self, v, eval(v))
+            
 
     def _load(self, tile_dir):
         """Load tiler from tile_dir
@@ -275,6 +301,10 @@ class tiler(object):
             ds.attrs["global_domain_size_1"],
         )
         self.N_tiles = ds.attrs["N_tiles"]
+        self.factor = (             # for searching neighbours
+            ds.attrs["factor_0"],
+            ds.attrs["factor_1"],
+        )
 
         # regenerate projections
         self.CRS = list(map(pyproj.CRS, list(ds["crs_strings"].values)))
@@ -330,6 +360,9 @@ class tiler(object):
         ds.attrs["global_domain_size_0"] = self.global_domain_size[0]
         ds.attrs["global_domain_size_1"] = self.global_domain_size[1]
         ds.attrs["N_tiles"] = self.N_tiles
+        # added to compute neighbours
+        ds.attrs["factor_0"] = self.factor[0]
+        ds.attrs["factor_1"] = self.factor[1]
         # store in netcdf file
         ds.to_netcdf(os.path.join(tile_dir, "info.nc"), mode="w")
         #
@@ -839,8 +872,8 @@ class run(object):
         self.particle_class.setLastID(0)
         pset = ParticleSet(fieldset=self.fieldset, pclass=self.particle_class)
         # TODO / uplet debug : only search within neighbooring tiles
-        # for _tile in tl.neighboors[tile]:  # where neighboors is a dict
-        for _tile in range(tl.N_tiles):
+        # for _tile in range(tl.N_tiles):
+        for _tile in tl.neighbours[tile]:  # where neighboors is a dict
             ncfile = self.nc(step=self.step - 1, tile=_tile)
             if os.path.isfile(ncfile):
                 # particle_class = _get_particle_class(self.pclass)
@@ -1184,6 +1217,7 @@ def step_window(
 
         # clean up
         prun.close()
+        del prun
         logging.info(f"tile {tile} : closing prun")
 
         return parcel_number, id_max
