@@ -138,21 +138,35 @@ class tiler(object):
         search neighbours for each tile.
         """
         ni,nj=self.factor
-        ntiles=self.N_tiles
+        ntiles=ni*nj
+        del_tile=self.del_tile
         neighbours={}
+        num_tile=0
+        # find neighbours on a grid based on factor without land tiles
         for n in range(ntiles):
-            neighbours[n] = [n]
-            ndict={}
-            ndict['S'] = n-1 if n%nj!=0 else None
-            ndict['SE'] = (n-1+nj)%ntiles if n%nj!=0 else None
-            ndict['E'] = (n+nj)%ntiles
-            ndict['NE'] = (n+1+nj)%ntiles if (n+1)%nj!=0 else None
-            ndict['N'] = n+1 if (n+1)%nj!=0 else None
-            ndict['NO'] = (n+1-nj)%ntiles if (n+1)%nj!=0 else None
-            ndict['O'] = (n-nj)%ntiles
-            ndict['SO'] = (n-1-nj)%ntiles  if n%nj!=0 else None
-            for k,v in ndict.items():
-                if ndict[k] is not None: neighbours[n].append(ndict[k]) 
+            # does not compute neighbours for land tile
+            if n not in del_tile:
+                neighbours[num_tile] = [n]
+                ndict={}
+                ndict['S'] = n-1 if n%nj!=0 else None
+                ndict['SE'] = (n-1+nj)%ntiles if n%nj!=0 else None
+                ndict['E'] = (n+nj)%ntiles
+                ndict['NE'] = (n+1+nj)%ntiles if (n+1)%nj!=0 else None
+                ndict['N'] = n+1 if (n+1)%nj!=0 else None
+                ndict['NO'] = (n+1-nj)%ntiles if (n+1)%nj!=0 else None
+                ndict['O'] = (n-nj)%ntiles
+                ndict['SO'] = (n-1-nj)%ntiles  if n%nj!=0 else None
+                for k,v in ndict.items():
+                    if ndict[k] is not None: neighbours[num_tile].append(ndict[k]) 
+                num_tile += 1
+        # modify neighbours tile due to land tiles
+        for k,v in neighbours.items():
+            # remove land tile from neighbours
+            v = np.asarray(list(set(v) - set(del_tile)))
+            # decrement tile number due to land tile before it
+            for i in sorted(del_tile, reverse=True):
+                v=np.where(v>i,v-1,v)
+            neighbours[k] = v.tolist()
         self.neighbours = neighbours
 
         
@@ -197,6 +211,7 @@ class tiler(object):
         for dim in ["i", "i_g"]:
             ds_extra[dim] = ds_extra[dim] + ds[dim][-1] + 1
         ds = xr.merge([xr.concat([ds[v], ds_extra[v]], ds[v].dims[-1]) for v in ds])
+        depth = xr.merge((ds.Depth , ds.XC, ds.YC)).set_coords(['XC', 'YC'])
         ds = (
             ds.reset_coords()[["XG", "YG"]]
             .rename_dims(i_g="i", j_g="j")
@@ -216,6 +231,13 @@ class tiler(object):
 
         # TODO / uplet debug : filter out land tiles
         #   - keep "Depth" along with "XG", "YG" in ds
+        tile_depth =[depth.isel(i=s[0], j=s[1]) for s in boundaries]
+        del_tile=[]
+        for tile in range(len(boundaries)):
+            if tile_depth[tile].Depth.max().values<=1.: del_tile.append(tile)
+        for i in sorted(del_tile, reverse=True):
+            del tiles[i]
+            del boundaries[i]
         N_tiles = len(tiles)
 
         #    d: [ds.isel(i=s[0], j=s[1], i_g=s[0], j_g=s[1]) for s in slices]
@@ -280,6 +302,7 @@ class tiler(object):
             "S",
             "G",
             "factor",               # for searching neighbours
+            "del_tile"
         ]
         for v in V:
             setattr(self, v, eval(v))
@@ -308,6 +331,9 @@ class tiler(object):
 
         # regenerate projections
         self.CRS = list(map(pyproj.CRS, list(ds["crs_strings"].values)))
+
+        # list of land tiles
+        self.del_tile = ds["del_tile"].values
 
         # rebuild slices (tiles, boundaries)
         D = {}
@@ -357,6 +383,10 @@ class tiler(object):
         )
         ds = df.to_xarray().rename(dict(index="tile"))
         ds["crs_strings"] = ("tile", self.crs_strings)  # was list
+
+        # store land tile indices
+        ds["del_tile"] = self.del_tile
+
         ds.attrs["global_domain_size_0"] = self.global_domain_size[0]
         ds.attrs["global_domain_size_1"] = self.global_domain_size[1]
         ds.attrs["N_tiles"] = self.N_tiles
