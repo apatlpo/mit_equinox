@@ -168,7 +168,7 @@ class tiler(object):
                 v=np.where(v>i,v-1,v)
             neighbours[k] = v.tolist()
         self.neighbours = neighbours
-
+        
         
     def _build(self, ds, factor, overlap, N_extra, projection=None):
         """Actually generates the horizontal tiling
@@ -445,10 +445,10 @@ class tiler(object):
 
         df = pd.DataFrame([gs.to_crs(self.CRS[t]).within(polygons[t]) for t in tiles]).T
 
-        # purpose of code below: Sylvie?
-        dummy = [abs(-35.703821 - lon[i]) < 1.0e-5 for i in range(len(lon))]
-        if any(dummy):
-            print("assign:3000002", lon[2], lat[2], df[df.index == 2])
+        # purpose of code below: Sylvie?  just for debug 
+        # dummy = [abs(-35.703821 - lon[i]) < 1.0e-5 for i in range(len(lon))]
+        # if any(dummy):
+        #     print("assign:3000002", lon[2], lat[2], df[df.index == 2])
 
         def _find_column(v):
             out = tiles[v]
@@ -1247,7 +1247,7 @@ def step_window(
 
         # clean up
         prun.close()
-        del prun
+        del prun, ds
         logging.info(f"tile {tile} : closing prun")
 
         return parcel_number, id_max

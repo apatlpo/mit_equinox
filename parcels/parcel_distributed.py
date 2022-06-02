@@ -39,28 +39,24 @@ overwrite = True
 ## base case
 
 # T = 360  # length of the total run [days]
-T = 2  # length of the total run [days]
 
-dt_window = timedelta(days=1.0)
-dt_outputs = timedelta(hours=1.0)
-dt_step = timedelta(hours=1.0)
+# dt_window = timedelta(days=1.0)
+# dt_outputs = timedelta(hours=1.0)
+# dt_step = timedelta(hours=1.0)
 # dt_seed = 10  # in days, base choice
-dt_seed = 0  # in days, base choice
-dt_reboot = timedelta(days=20.0)
+# dt_seed = 0  # in days, base choice
+# dt_reboot = timedelta(days=20.0)
 
-tile_size = dict(factor=(5, 10), overlap=(250, 250))
+# tile_size = dict(factor=(5, 10), overlap=(250, 250))
 # init_dij = 50  # initial position subsampling compared to llc grid
-init_dij = 100  # initial position subsampling compared to llc grid
-init_uplet = None # one number of parcels at each release location
+# init_uplet = None # one number of parcels at each release location
 
-pclass = "extended" # TODO / uplet debug : do not interpolate all fields
+# pclass = "extended" # TODO / uplet debug : do not interpolate all fields
 # but pclass = "jit" may be broken, maybe not
 
 # number of dask jobs launched for parcels simulations
 # dask_jobs = 12 # 13?
 # jobqueuekw = dict(processes=4, cores=4)
-dask_jobs = 5 
-jobqueuekw = dict(processes=4, cores=4)
 
 # following is not allowed on datarmor:
 # dask_jobs = 12*4
@@ -70,18 +66,23 @@ jobqueuekw = dict(processes=4, cores=4)
 
 ## uplet case
 
-# T = 5  # length of the total run [days]
+T = 4  # length of the total run [days]
+dt_window = timedelta(days=1)
+dt_outputs = timedelta(hours=1.0)
+dt_step = timedelta(hours=1.0)
+dt_seed = 0  # in days
+dt_reboot = timedelta(days=2)
 
-# dt_window = timedelta(hours=3)
-# dt_seed = 0  # in days
+tile_size = dict(factor=(6, 10), overlap=(150, 150)) # reduce size of tiles and decrease overlap
 
-# tile_size = dict(factor=(10, 20), overlap=(150, 150)) # reduce size of tiles and decrease overlap
-# init_dij = 4  # initial position subsampling compared to llc grid
-# init_uplet = (3, 2./111.) # initial number of parcels at each release location
+init_dij = 4  # initial position subsampling compared to llc grid
+init_uplet = (3, 2./111.) # initial number of parcels at each release location
 
+pclass = "extended"
 # pclass = "jit"  # uplet debug
 
-#jobqueuekw = dict(processes=16, cores=16) # uplet debug
+dask_jobs = 8
+jobqueuekw = dict(processes=2, cores=2) # uplet debug
 
 
 # dev !!
@@ -164,7 +165,7 @@ def run(dirs, tl, cluster, client):
         restart = max(list(log)) + 1
     else:
         restart = 0
-
+    logging.info('restart='+str(restart))
     # clean up data for restart
     tl.clean_up(dirs["run"], restart)
 
@@ -173,7 +174,6 @@ def run(dirs, tl, cluster, client):
         local_numbers = {tile: 0 for tile in range(tl.N_tiles)}
         max_ids = {tile: None for tile in range(tl.N_tiles)}
     else:
-        # print(log, restart)
         _log = log[restart - 1]
         global_parcel_number = _log["global_parcel_number"]
         # local_numbers = _log['local_numbers'] # TMP !!!
@@ -207,7 +207,8 @@ def run(dirs, tl, cluster, client):
             persist=False,
         )
         _ = wait(ds_tiles)
-        logging.debug("llc data persisted")
+        logging.debug("llc data loaded")
+        # logging.debug("llc data persisted")
 
         # seed with more particles
         if dt_seed>0:
@@ -292,7 +293,7 @@ def spin_up_cluster(jobs):
         "distributed",
         jobs=jobs,
         fraction=0.9,
-        walltime="06:00:00",
+        walltime="12:00:00",
         **jobqueuekw,
     )
     
@@ -303,13 +304,19 @@ def spin_up_cluster(jobs):
 def close_dask(cluster, client):
     logging.info("starts closing dask cluster ...")
     try:
-        cluster.close()
+        
+        client.close()
+        logging.info("client closed ...")
+        # manually kill pbs jobs
+        manual_kill_jobs()
+        logging.info("manually killed jobs ...")
+        # cluster.close()
+        # logging.info("cluster closed ...")
     except:
         logging.exception("cluster.close failed ...")
-    # manually kill pbs jobs
-    manual_kill_jobs()
-    # close client
-    client.close()
+        # manually kill pbs jobs
+        manual_kill_jobs()
+
     logging.info("... done")
 
 
@@ -341,7 +348,8 @@ def dask_compute_batch(computations, client, batch_size=None):
     """
     # compute batch size according to number of workers
     if batch_size is None:
-        batch_size = len(client.scheduler_info()["workers"])
+        # batch_size = len(client.scheduler_info()["workers"])
+        batch_size = sum(list(client.nthreads().values()))
     # find batch indices
     total_range = range(len(computations))
     splits = max(1, np.ceil(len(total_range)/batch_size))
@@ -349,6 +357,7 @@ def dask_compute_batch(computations, client, batch_size=None):
     # launch computations
     outputs = []
     for b in batches:
+        logging.info("batches: " + str(b)+ " / "+str(total_range))
         out = dask.compute(*computations[slice(b[0], b[-1]+1)])
         outputs.append(out)
         
