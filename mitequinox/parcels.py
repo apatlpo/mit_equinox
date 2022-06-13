@@ -129,7 +129,7 @@ class tiler(object):
         # TODO / uplet debug : generate neighboor dict
         #   may use i, j indices directly
         self.generate_neighboors()
-        
+
         self.crs_wgs84 = crs_wgs84
         self.N_extra = N_extra
 
@@ -157,7 +157,7 @@ class tiler(object):
                 ndict['O'] = (n-nj)%ntiles
                 ndict['SO'] = (n-1-nj)%ntiles  if n%nj!=0 else None
                 for k,v in ndict.items():
-                    if ndict[k] is not None: neighbours[num_tile].append(ndict[k]) 
+                    if ndict[k] is not None: neighbours[num_tile].append(ndict[k])
                 num_tile += 1
         # modify neighbours tile due to land tiles
         for k,v in neighbours.items():
@@ -168,8 +168,8 @@ class tiler(object):
                 v=np.where(v>i,v-1,v)
             neighbours[k] = v.tolist()
         self.neighbours = neighbours
-        
-        
+
+
     def _build(self, ds, factor, overlap, N_extra, projection=None):
         """Actually generates the horizontal tiling
 
@@ -306,7 +306,7 @@ class tiler(object):
         ]
         for v in V:
             setattr(self, v, eval(v))
-            
+
 
     def _load(self, tile_dir):
         """Load tiler from tile_dir
@@ -445,7 +445,7 @@ class tiler(object):
 
         df = pd.DataFrame([gs.to_crs(self.CRS[t]).within(polygons[t]) for t in tiles]).T
 
-        # purpose of code below: Sylvie?  just for debug 
+        # purpose of code below: Sylvie?  just for debug
         # dummy = [abs(-35.703821 - lon[i]) < 1.0e-5 for i in range(len(lon))]
         # if any(dummy):
         #     print("assign:3000002", lon[2], lat[2], df[df.index == 2])
@@ -1057,8 +1057,8 @@ def _spread_parcels(x, y, num, radius):
     assert radius>0, "Random parcel distribution (radius<0) is not implemented yet"
     for i in range(num):
         exp = np.exp(1j*i/num*2*np.pi)
-        dx = np.real(exp)*radius
-        dy = np.imag(exp)*radius*scale
+        dx = np.real(exp)*radius*scale
+        dy = np.imag(exp)*radius
         x_out[i::num] = x + dx
         y_out[i::num] = y + dy
     return x_out, y_out
