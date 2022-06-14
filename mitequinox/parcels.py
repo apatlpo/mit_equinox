@@ -889,6 +889,9 @@ class run(object):
             # initial value of id_max
             self.id_max = max(pset.collection.data["id"])
             self.empty = False
+            # store particles for future analysis
+            if uplet:
+                self.store_initial_uplets(uplet, pset)
         else:
             self.id_max = -1
 
@@ -1044,6 +1047,20 @@ class run(object):
             float_tiles["id"] = self["id"]
             float_tiles = float_tiles.drop_duplicates(subset=["id"])
             float_tiles.to_csv(self.csv())
+
+    def store_initial_uplets(self, uplet, pset):
+        num = uplet[0]
+        id = pset.collection.data["id"]
+        lon, lat = pset.collection.data["lon"], pset.collection.data["lat"]
+        ds = xr.Dataset(dict(id = np.vstack([id[i::num] for i in range(num)]),
+                             lon = np.vstack([lon[i::num] for i in range(num)]),
+                             lat = np.vstack([lat[i::num] for i in range(num)]),
+                             ),
+                        coords=dict(uplet=_lon.size//_num, item=np.arange(num)),
+                        )
+        tile_dir = self._tile_run_dirs[self.tile]
+        nc = os.path.join(tile_dir, "floats_init_uplet.nc")
+        ds.to_netcd(nc, mode="w")
 
     def close(self):
         del self.pset
@@ -1364,13 +1381,19 @@ def load_nc(
 ):
     """
     Load floats netcdf files from a parcel simulation
-    run_dir: str, directory of the simulation
-    step_tile: str, characteristic string to select the floats to load. (default=*)
-               name of the files are floats_xxx_xxx.nc, first xxx is step, second is tile
-               ex: floats_002_023.nc step step 2 of tile 23
-               step_tile can be 002_* for step 2 of every tile or *_023 for every step of the tile 23
-    index : str, column to set as index for the returned dask dataframe ("trajectory","time",
-            "lat","lon", or "z")
+
+    Parameters
+    ----------
+    run_dir: str
+        directory of the simulation
+    step_tile: str
+        characteristic string to select the floats to load. (default=*)
+        name of the files are floats_xxx_xxx.nc, first xxx is step, second is tile
+        ex: floats_002_023.nc step step 2 of tile 23
+        step_tile can be 002_* for step 2 of every tile or *_023 for every step of the tile 23
+    index : str
+        column to set as index for the returned dask dataframe
+        ("trajectory","time", "lat","lon", or "z")
     """
 
     def xr2df(file):
