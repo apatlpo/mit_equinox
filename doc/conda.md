@@ -11,13 +11,14 @@ conda create -n equinox -c conda-forge python=3.8 tqdm \
             fastparquet pyarrow bottleneck \
             jupyterlab ipywidgets \
             cartopy geopandas descartes xesmf \
+            rioxarray boule \
             scikit-learn seaborn \
             hvplot geoviews datashader nodejs \
             intake-xarray gcsfs \
             cmocean gsw \
             xhistogram flox \
             pytide pyinterp h3-py \
-            parcels
+            parcels \
 
 conda activate equinox
 

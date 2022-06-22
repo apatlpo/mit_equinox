@@ -24,44 +24,68 @@ step_window_delayed = delayed(pa.step_window)
 # ---- Run parameters
 
 # root_dir = '/home1/scratch/aponte/parcels/'
-root_dir = "/home/datawork-lops-osi/equinox/mit4320/parcels/"
-# root_dir = '/home1/datawork/slgentil/parcels/'
+# root_dir = "/home/datawork-lops-osi/equinox/mit4320/parcels/"
+root_dir = '/home1/scratch/slgentil/parcels/'
 
 # 5x5 tiles dij=100 T=365 5jobs x 5workers
-run_name = "global_dij4_up3_3h" # not going through with dij2 but may be related to bug
+# run_name = "global_dij8_up3_r2s111_15j"
+run_name = "global_dij8_up3_r1s111_15j"
 
 # will overwrite existing simulation
 overwrite = True
 #overwrite = False
 
-# simulation parameters
+### simulation parameters
 
-#T = 360  # length of the total run [days]
-T = 5  # length of the total run [days]
+## base case
 
-#dt_window = timedelta(days=1.0)
-#dt_window = timedelta(hours=12)
-dt_window = timedelta(hours=3)
-dt_outputs = timedelta(hours=1.0)
-dt_step = timedelta(hours=1.0)
-#dt_seed = 10  # in days
-dt_seed = 0  # in days
-dt_reboot = timedelta(days=10.0)
+# T = 360  # length of the total run [days]
 
-init_dij = 4  # initial position subsampling compared to llc grid
-#init_dij = 20  # initial position subsampling compared to llc grid
-init_uplet = (3, 2./111.) # initial number of parcels at each release location
+# dt_window = timedelta(days=1.0)
+# dt_outputs = timedelta(hours=1.0)
+# dt_step = timedelta(hours=1.0)
+# dt_seed = 10  # in days, base choice
+# dt_seed = 0  # in days, base choice
+# dt_reboot = timedelta(days=20.0)
+
+# tile_size = dict(factor=(5, 10), overlap=(250, 250))
+# init_dij = 50  # initial position subsampling compared to llc grid
+# init_uplet = None # one number of parcels at each release location
+
+# pclass = "extended" # TODO / uplet debug : do not interpolate all fields
+# but pclass = "jit" may be broken, maybe not
 
 # number of dask jobs launched for parcels simulations
-dask_jobs = 12
-#jobqueuekw = dict(processes=4, cores=4)
-jobqueuekw = dict(processes=16, cores=16)
+# dask_jobs = 12 # 13?
+# jobqueuekw = dict(processes=4, cores=4)
 
 # following is not allowed on datarmor:
 # dask_jobs = 12*4
 # jobqueuekw=dict(processes=1, cores=1, memory="30GB",
 #                resource_spec="select=1:ncpus=6:mem=30GB",
 #               )
+
+## uplet case
+
+T = 15  # length of the total run [days]
+dt_window = timedelta(days=1)
+dt_outputs = timedelta(hours=1.0)
+dt_step = timedelta(hours=1.0)
+dt_seed = 0  # in days
+dt_reboot = timedelta(days=3)
+
+tile_size = dict(factor=(6, 10), overlap=(150, 150)) # reduce size of tiles and decrease overlap
+
+init_dij = 8  # initial position subsampling compared to llc grid
+# init_uplet = (3, 2./111.) # initial number of parcels at each release location
+init_uplet = (3, 1./111.) # initial number of parcels at each release location
+
+pclass = "extended"
+# pclass = "jit"  # uplet debug
+
+dask_jobs = 8
+jobqueuekw = dict(processes=2, cores=2) # uplet debug
+
 
 # dev !!
 # dt_reboot = timedelta(days=2.)
@@ -97,8 +121,7 @@ def generate_tiling(dirs, overwrite):
         logging.info("creates and store tiling")
         # create tiling
         grd = ut.load_grd()[["XC", "YC", "XG", "YG"]].reset_coords().persist()
-        #tl = pa.tiler(ds=grd, factor=(5, 10), overlap=(250, 250))
-        tl = pa.tiler(ds=grd, factor=(10, 20), overlap=(150, 150)) # debug
+        tl = pa.tiler(ds=grd, **tile_size)
         # store tiler
         tl.store(dirs["tiling"])
     else:
@@ -127,7 +150,8 @@ def run(dirs, tl, cluster, client):
     ds = load_llc()
 
     # set start and end times
-    t_start = ut.np64toDate(ds["time"][0].values)
+    # t_start = ut.np64toDate(ds["time"][0].values)
+    t_start = ut.np64toDate(np.datetime64('2012-02-01'))
     t_end = t_start + int(T * 86400 / dt_window.total_seconds()) * dt_window
     str_fmt = "Global start = {}  /  Global end = {}".format(
         t_start.strftime("%Y-%m-%d %H:%M"),
@@ -144,7 +168,7 @@ def run(dirs, tl, cluster, client):
         restart = max(list(log)) + 1
     else:
         restart = 0
-
+    logging.info('restart='+str(restart))
     # clean up data for restart
     tl.clean_up(dirs["run"], restart)
 
@@ -153,7 +177,6 @@ def run(dirs, tl, cluster, client):
         local_numbers = {tile: 0 for tile in range(tl.N_tiles)}
         max_ids = {tile: None for tile in range(tl.N_tiles)}
     else:
-        # print(log, restart)
         _log = log[restart - 1]
         global_parcel_number = _log["global_parcel_number"]
         # local_numbers = _log['local_numbers'] # TMP !!!
@@ -184,10 +207,11 @@ def run(dirs, tl, cluster, client):
             ds,
             slice(local_t_start, local_t_end, None),
             tl,
-            persist=True,
+            persist=False,
         )
         _ = wait(ds_tiles)
-        logging.debug("llc data persisted")
+        logging.debug("llc data loaded")
+        # logging.debug("llc data persisted")
 
         # seed with more particles
         if dt_seed>0:
@@ -211,7 +235,7 @@ def run(dirs, tl, cluster, client):
                 init_dij=init_dij,
                 init_uplet=init_uplet,
                 parcels_remove_on_land=True,
-                pclass="extended",
+                pclass=pclass,
                 id_max=max_ids[tile],
                 seed=seed,
             )
@@ -219,7 +243,10 @@ def run(dirs, tl, cluster, client):
         ]
         try:
             logging.debug("launching step_window distribution")
-            dsteps_out = dask.compute(*dsteps)
+            #dsteps_out = dask.compute(*dsteps)
+            dsteps_out = dask_compute_batch(dsteps, client) # TODO / uplet debug : launch in batches to use less workers
+            # batch computation may not be functional yet
+
             # force even distribution amongst workers
             # dsteps_out = client.compute(dsteps, sync=True) # this is not working at the moment
             # http://distributed.dask.org/en/stable/locality.html#specify-workers-with-compute-persist
@@ -232,8 +259,8 @@ def run(dirs, tl, cluster, client):
 
         # try to manually clean up memory
         # https://coiled.io/blog/tackling-unmanaged-memory-with-dask/
-        client.run(gc.collect)
-        client.run(trim_memory)  # should not be done systematically
+        # client.run(gc.collect)
+        # client.run(trim_memory)  # should not be done systematically
 
         # update number of global number of drifters and maximum ids for each tiles
         _local_numbers = list(zip(*dsteps_out))[0]
@@ -269,9 +296,10 @@ def spin_up_cluster(jobs):
         "distributed",
         jobs=jobs,
         fraction=0.9,
-        walltime="06:00:00",
+        walltime="12:00:00",
         **jobqueuekw,
     )
+    
     logging.info("dashboard via ssh: " + ut.dashboard_ssh_forward(client))
     return cluster, client
 
@@ -279,13 +307,19 @@ def spin_up_cluster(jobs):
 def close_dask(cluster, client):
     logging.info("starts closing dask cluster ...")
     try:
-        cluster.close()
+        
+        client.close()
+        logging.info("client closed ...")
+        # manually kill pbs jobs
+        manual_kill_jobs()
+        logging.info("manually killed jobs ...")
+        # cluster.close()
+        # logging.info("cluster closed ...")
     except:
         logging.exception("cluster.close failed ...")
-    # manually kill pbs jobs
-    manual_kill_jobs()
-    # close client
-    client.close()
+        # manually kill pbs jobs
+        manual_kill_jobs()
+
     logging.info("... done")
 
 
@@ -312,6 +346,30 @@ def manual_kill_jobs():
                 # print(e.output.decode())
                 pass
 
+def dask_compute_batch(computations, client, batch_size=None):
+    """ breaks down a list of computations into batches
+    """
+    # compute batch size according to number of workers
+    if batch_size is None:
+        # batch_size = len(client.scheduler_info()["workers"])
+        batch_size = sum(list(client.nthreads().values()))
+    # find batch indices
+    total_range = range(len(computations))
+    splits = max(1, np.ceil(len(total_range)/batch_size))
+    batches = np.array_split(total_range, splits)
+    # launch computations
+    outputs = []
+    for b in batches:
+        logging.info("batches: " + str(b)+ " / "+str(total_range))
+        out = dask.compute(*computations[slice(b[0], b[-1]+1)])
+        outputs.append(out)
+        
+        # try to manually clean up memory
+        # https://coiled.io/blog/tackling-unmanaged-memory-with-dask/
+        client.run(gc.collect)
+        client.run(trim_memory)  # should not be done systematically
+        
+    return sum(outputs, ())
 
 def main():
 

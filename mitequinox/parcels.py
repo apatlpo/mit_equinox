@@ -126,8 +126,49 @@ class tiler(object):
             self._load(tile_dir)
         else:
             assert False, "Either ds or tile_dir are required."
+        # TODO / uplet debug : generate neighboor dict
+        #   may use i, j indices directly
+        self.generate_neighboors()
+
         self.crs_wgs84 = crs_wgs84
         self.N_extra = N_extra
+
+    def generate_neighboors(self):
+        """
+        search neighbours for each tile.
+        """
+        ni,nj=self.factor
+        ntiles=ni*nj
+        del_tile=self.del_tile
+        neighbours={}
+        num_tile=0
+        # find neighbours on a grid based on factor without land tiles
+        for n in range(ntiles):
+            # does not compute neighbours for land tile
+            if n not in del_tile:
+                neighbours[num_tile] = [n]
+                ndict={}
+                ndict['S'] = n-1 if n%nj!=0 else None
+                ndict['SE'] = (n-1+nj)%ntiles if n%nj!=0 else None
+                ndict['E'] = (n+nj)%ntiles
+                ndict['NE'] = (n+1+nj)%ntiles if (n+1)%nj!=0 else None
+                ndict['N'] = n+1 if (n+1)%nj!=0 else None
+                ndict['NO'] = (n+1-nj)%ntiles if (n+1)%nj!=0 else None
+                ndict['O'] = (n-nj)%ntiles
+                ndict['SO'] = (n-1-nj)%ntiles  if n%nj!=0 else None
+                for k,v in ndict.items():
+                    if ndict[k] is not None: neighbours[num_tile].append(ndict[k])
+                num_tile += 1
+        # modify neighbours tile due to land tiles
+        for k,v in neighbours.items():
+            # remove land tile from neighbours
+            v = np.asarray(list(set(v) - set(del_tile)))
+            # decrement tile number due to land tile before it
+            for i in sorted(del_tile, reverse=True):
+                v=np.where(v>i,v-1,v)
+            neighbours[k] = v.tolist()
+        self.neighbours = neighbours
+
 
     def _build(self, ds, factor, overlap, N_extra, projection=None):
         """Actually generates the horizontal tiling
@@ -170,6 +211,7 @@ class tiler(object):
         for dim in ["i", "i_g"]:
             ds_extra[dim] = ds_extra[dim] + ds[dim][-1] + 1
         ds = xr.merge([xr.concat([ds[v], ds_extra[v]], ds[v].dims[-1]) for v in ds])
+        depth = xr.merge((ds.Depth , ds.XC, ds.YC)).set_coords(['XC', 'YC'])
         ds = (
             ds.reset_coords()[["XG", "YG"]]
             .rename_dims(i_g="i", j_g="j")
@@ -186,6 +228,16 @@ class tiler(object):
         )
         tiles = list(product(tiles_1d["i"], tiles_1d["j"]))
         boundaries = list(product(boundaries_1d["i"], boundaries_1d["j"]))
+
+        # TODO / uplet debug : filter out land tiles
+        #   - keep "Depth" along with "XG", "YG" in ds
+        tile_depth =[depth.isel(i=s[0], j=s[1]) for s in boundaries]
+        del_tile=[]
+        for tile in range(len(boundaries)):
+            if tile_depth[tile].Depth.max().values<=1.: del_tile.append(tile)
+        for i in sorted(del_tile, reverse=True):
+            del tiles[i]
+            del boundaries[i]
         N_tiles = len(tiles)
 
         #    d: [ds.isel(i=s[0], j=s[1], i_g=s[0], j_g=s[1]) for s in slices]
@@ -249,9 +301,12 @@ class tiler(object):
             "crs_strings",
             "S",
             "G",
+            "factor",               # for searching neighbours
+            "del_tile"
         ]
         for v in V:
             setattr(self, v, eval(v))
+
 
     def _load(self, tile_dir):
         """Load tiler from tile_dir
@@ -269,9 +324,16 @@ class tiler(object):
             ds.attrs["global_domain_size_1"],
         )
         self.N_tiles = ds.attrs["N_tiles"]
+        self.factor = (             # for searching neighbours
+            ds.attrs["factor_0"],
+            ds.attrs["factor_1"],
+        )
 
         # regenerate projections
         self.CRS = list(map(pyproj.CRS, list(ds["crs_strings"].values)))
+
+        # list of land tiles
+        self.del_tile = ds["del_tile"].values
 
         # rebuild slices (tiles, boundaries)
         D = {}
@@ -321,9 +383,16 @@ class tiler(object):
         )
         ds = df.to_xarray().rename(dict(index="tile"))
         ds["crs_strings"] = ("tile", self.crs_strings)  # was list
+
+        # store land tile indices
+        ds["del_tile"] = self.del_tile
+
         ds.attrs["global_domain_size_0"] = self.global_domain_size[0]
         ds.attrs["global_domain_size_1"] = self.global_domain_size[1]
         ds.attrs["N_tiles"] = self.N_tiles
+        # added to compute neighbours
+        ds.attrs["factor_0"] = self.factor[0]
+        ds.attrs["factor_1"] = self.factor[1]
         # store in netcdf file
         ds.to_netcdf(os.path.join(tile_dir, "info.nc"), mode="w")
         #
@@ -376,10 +445,10 @@ class tiler(object):
 
         df = pd.DataFrame([gs.to_crs(self.CRS[t]).within(polygons[t]) for t in tiles]).T
 
-        # purpose of code below: Sylvie?
-        dummy = [abs(-35.703821 - lon[i]) < 1.0e-5 for i in range(len(lon))]
-        if any(dummy):
-            print("assign:3000002", lon[2], lat[2], df[df.index == 2])
+        # purpose of code below: Sylvie?  just for debug
+        # dummy = [abs(-35.703821 - lon[i]) < 1.0e-5 for i in range(len(lon))]
+        # if any(dummy):
+        #     print("assign:3000002", lon[2], lat[2], df[df.index == 2])
 
         def _find_column(v):
             out = tiles[v]
@@ -815,11 +884,14 @@ class run(object):
         if pset is not None:
             if pset.size > 0:
                 pset.collection.data["id"] = pset.collection.data["id"] + int(
-                    tile * 1e6
+                    tile * 1e6      # TODO / uplet debug: is 1e6 enough ?
                 )
             # initial value of id_max
             self.id_max = max(pset.collection.data["id"])
             self.empty = False
+            # store particles for future analysis
+            if uplet:
+                self.store_initial_uplets(uplet, pset)
         else:
             self.id_max = -1
 
@@ -832,7 +904,9 @@ class run(object):
         # load parcel file from previous runs
         self.particle_class.setLastID(0)
         pset = ParticleSet(fieldset=self.fieldset, pclass=self.particle_class)
-        for _tile in range(tl.N_tiles):
+        # TODO / uplet debug : only search within neighbooring tiles
+        # for _tile in range(tl.N_tiles):
+        for _tile in tl.neighbours[tile]:  # where neighboors is a dict
             ncfile = self.nc(step=self.step - 1, tile=_tile)
             if os.path.isfile(ncfile):
                 # particle_class = _get_particle_class(self.pclass)
@@ -845,9 +919,9 @@ class run(object):
                     restart=True,
                     restarttime=np.datetime64(self.starttime),
                 )
-                logging.info(f" tile {self.tile} run: {_tile} tile nc loaded - {ncfile} ")
+                logging.debug(f" tile {self.tile} run: {_tile} tile nc loaded - {ncfile} ")
                 df = pd.read_csv(self.csv(step=self.step - 1, tile=_tile), index_col=0)
-                logging.info(f" tile {self.tile} run: {_tile} tile csv loaded")
+                logging.debug(f" tile {self.tile} run: {_tile} tile csv loaded")
                 df_not_in_tile = df.loc[df["tile"] != tile]
                 if df_not_in_tile.size > 0:
                     boolind = np.array(
@@ -974,6 +1048,20 @@ class run(object):
             float_tiles = float_tiles.drop_duplicates(subset=["id"])
             float_tiles.to_csv(self.csv())
 
+    def store_initial_uplets(self, uplet, pset):
+        num = uplet[0]
+        id = pset.collection.data["id"]
+        lon, lat = pset.collection.data["lon"], pset.collection.data["lat"]
+        ds = xr.Dataset(dict(id = (["item","uplet"],np.vstack([id[i::num] for i in range(num)])),
+                             lon = (["item","uplet"],np.vstack([lon[i::num] for i in range(num)])),
+                             lat = (["item","uplet"],np.vstack([lat[i::num] for i in range(num)])),
+                             ),
+                        coords=dict(uplet=np.arange(lon.size//num), item=np.arange(num)),
+                        )
+        tile_dir = self._tile_run_dirs[self.tile]
+        nc = os.path.join(tile_dir, "floats_init_uplet.nc")
+        ds.to_netcdf(nc, mode="w")
+
     def close(self):
         del self.pset
 
@@ -986,8 +1074,8 @@ def _spread_parcels(x, y, num, radius):
     assert radius>0, "Random parcel distribution (radius<0) is not implemented yet"
     for i in range(num):
         exp = np.exp(1j*i/num*2*np.pi)
-        dx = np.real(exp)*radius
-        dy = np.imag(exp)*radius*scale
+        dx = np.real(exp)*radius*scale
+        dy = np.imag(exp)*radius
         x_out[i::num] = x + dx
         y_out[i::num] = y + dy
     return x_out, y_out
@@ -1121,7 +1209,7 @@ def step_window(
             llc = os.path.join(tile_dir, "llc.nc")
             ds = xr.open_dataset(llc, chunks={"time": 1})
         logging.info(f" tile {tile}: ds is here")
-        
+
         # init run object
         prun = run(
             tile,
@@ -1176,6 +1264,7 @@ def step_window(
 
         # clean up
         prun.close()
+        del prun, ds
         logging.info(f"tile {tile} : closing prun")
 
         return parcel_number, id_max
@@ -1292,13 +1381,19 @@ def load_nc(
 ):
     """
     Load floats netcdf files from a parcel simulation
-    run_dir: str, directory of the simulation
-    step_tile: str, characteristic string to select the floats to load. (default=*)
-               name of the files are floats_xxx_xxx.nc, first xxx is step, second is tile
-               ex: floats_002_023.nc step step 2 of tile 23
-               step_tile can be 002_* for step 2 of every tile or *_023 for every step of the tile 23
-    index : str, column to set as index for the returned dask dataframe ("trajectory","time",
-            "lat","lon", or "z")
+
+    Parameters
+    ----------
+    run_dir: str
+        directory of the simulation
+    step_tile: str
+        characteristic string to select the floats to load. (default=*)
+        name of the files are floats_xxx_xxx.nc, first xxx is step, second is tile
+        ex: floats_002_023.nc step step 2 of tile 23
+        step_tile can be 002_* for step 2 of every tile or *_023 for every step of the tile 23
+    index : str
+        column to set as index for the returned dask dataframe
+        ("trajectory","time", "lat","lon", or "z")
     """
 
     def xr2df(file):
