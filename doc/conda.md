@@ -6,19 +6,15 @@ bash Miniconda3-latest-Linux-x86_64.sh
 bash
 conda update conda
 # edit ~/.condarc as described below
-conda create -n equinox -c conda-forge python=3.8 tqdm \
+mamba create -n equinox -c conda-forge python=3.9 tqdm \
             dask-jobqueue xarray zarr netcdf4 python-graphviz \
             fastparquet pyarrow bottleneck \
-            jupyterlab ipywidgets \
-            cartopy geopandas descartes xesmf \
-            rioxarray boule \
-            scikit-learn seaborn \
-            hvplot geoviews datashader nodejs \
-            intake-xarray gcsfs \
-            cmocean gsw \
+            jupyterlab jupyterhub ipywidgets \
             xhistogram flox \
-            pytide pyinterp h3-py \
-            parcels \
+            cartopy geopandas descartes xesmf rioxarray boule \
+            scikit-learn seaborn hvplot geoviews datashader nodejs \
+            intake-xarray gcsfs cmocean gsw \
+            pytide pyinterp h3-py parcels
 
 conda activate equinox
 
@@ -28,19 +24,20 @@ pip install git+https://github.com/MITgcm/xmitgcm.git
 pip install git+https://github.com/xgcm/xrft.git
 
 #pip install rechunker
-#pip install git+https://github.com/pangeo-data/rechunker.git
+pip install git+https://github.com/pangeo-data/rechunker.git
 # need to download and revert to version v0.3.3 for now, see https://github.com/pangeo-data/rechunker/issues/92
-git clone https://github.com/pangeo-data/rechunker.git
-cd rechunker
-git checkout 0.3.3 ??
-pip install -e .
+#git clone https://github.com/pangeo-data/rechunker.git
+#cd rechunker
+#git checkout 0.3.3 ??
+#pip install -e .
 
 #conda install libnetcdf=4.6.1 # not necessary ?!
 #conda install -c fbriol pyfes
 
 conda install pywavelets
 
-pip install git+git://github.com/psf/black
+#pip install git+git://github.com/psf/black
+pip install black
 
 cd mit_equinox; pip install -e .
 
