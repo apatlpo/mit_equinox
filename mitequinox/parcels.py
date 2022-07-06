@@ -1052,15 +1052,15 @@ class run(object):
         num = uplet[0]
         id = pset.collection.data["id"]
         lon, lat = pset.collection.data["lon"], pset.collection.data["lat"]
-        ds = xr.Dataset(dict(id = np.vstack([id[i::num] for i in range(num)]),
-                             lon = np.vstack([lon[i::num] for i in range(num)]),
-                             lat = np.vstack([lat[i::num] for i in range(num)]),
+        ds = xr.Dataset(dict(id = (["item","uplet"],np.vstack([id[i::num] for i in range(num)])),
+                             lon = (["item","uplet"],np.vstack([lon[i::num] for i in range(num)])),
+                             lat = (["item","uplet"],np.vstack([lat[i::num] for i in range(num)])),
                              ),
-                        coords=dict(uplet=_lon.size//_num, item=np.arange(num)),
+                        coords=dict(uplet=np.arange(lon.size//num), item=np.arange(num)),
                         )
         tile_dir = self._tile_run_dirs[self.tile]
         nc = os.path.join(tile_dir, "floats_init_uplet.nc")
-        ds.to_netcd(nc, mode="w")
+        ds.to_netcdf(nc, mode="w")
 
     def close(self):
         del self.pset

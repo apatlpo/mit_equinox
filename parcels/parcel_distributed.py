@@ -28,7 +28,8 @@ step_window_delayed = delayed(pa.step_window)
 root_dir = '/home1/scratch/slgentil/parcels/'
 
 # 5x5 tiles dij=100 T=365 5jobs x 5workers
-run_name = "global_dij4_up3_3h" # not going through with dij2 but may be related to bug
+# run_name = "global_dij8_up3_r2s111_15j"
+run_name = "global_dij8_up3_r1s111_15j"
 
 # will overwrite existing simulation
 overwrite = True
@@ -66,17 +67,18 @@ overwrite = True
 
 ## uplet case
 
-T = 4  # length of the total run [days]
+T = 15  # length of the total run [days]
 dt_window = timedelta(days=1)
 dt_outputs = timedelta(hours=1.0)
 dt_step = timedelta(hours=1.0)
 dt_seed = 0  # in days
-dt_reboot = timedelta(days=2)
+dt_reboot = timedelta(days=3)
 
 tile_size = dict(factor=(6, 10), overlap=(150, 150)) # reduce size of tiles and decrease overlap
 
-init_dij = 4  # initial position subsampling compared to llc grid
-init_uplet = (3, 2./111.) # initial number of parcels at each release location
+init_dij = 8  # initial position subsampling compared to llc grid
+# init_uplet = (3, 2./111.) # initial number of parcels at each release location
+init_uplet = (3, 1./111.) # initial number of parcels at each release location
 
 pclass = "extended"
 # pclass = "jit"  # uplet debug
@@ -148,7 +150,8 @@ def run(dirs, tl, cluster, client):
     ds = load_llc()
 
     # set start and end times
-    t_start = ut.np64toDate(ds["time"][0].values)
+    # t_start = ut.np64toDate(ds["time"][0].values)
+    t_start = ut.np64toDate(np.datetime64('2012-02-01'))
     t_end = t_start + int(T * 86400 / dt_window.total_seconds()) * dt_window
     str_fmt = "Global start = {}  /  Global end = {}".format(
         t_start.strftime("%Y-%m-%d %H:%M"),
