@@ -4,3 +4,4 @@ rm -rf daskf.pbs
 rm -rf *datarmor0-scheduler-1.log dask_pbs.o*  *.nodefile
 rm -rf jlab.pbs.o* jlab*.log
 
+rm -rf .ipynb_checkpoints/
