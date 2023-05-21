@@ -128,7 +128,8 @@ class tiler(object):
             assert False, "Either ds or tile_dir are required."
         # TODO / uplet debug : generate neighboor dict
         #   may use i, j indices directly
-        self.generate_neighboors()
+        if self.factor:
+            self.generate_neighboors()
 
         self.crs_wgs84 = crs_wgs84
         self.N_extra = N_extra
@@ -324,16 +325,19 @@ class tiler(object):
             ds.attrs["global_domain_size_1"],
         )
         self.N_tiles = ds.attrs["N_tiles"]
-        self.factor = (             # for searching neighbours
-            ds.attrs["factor_0"],
-            ds.attrs["factor_1"],
-        )
+        self.factor = None
+        if "factor_0" in ds.attrs and "factor_1" in ds.attrs:
+            self.factor = (             # for searching neighbours
+                ds.attrs["factor_0"],
+                ds.attrs["factor_1"],
+            )
 
         # regenerate projections
         self.CRS = list(map(pyproj.CRS, list(ds["crs_strings"].values)))
 
         # list of land tiles
-        self.del_tile = ds["del_tile"].values
+        if "del_tile" in ds:
+            self.del_tile = ds["del_tile"].values
 
         # rebuild slices (tiles, boundaries)
         D = {}
