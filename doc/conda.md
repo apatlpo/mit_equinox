@@ -6,7 +6,7 @@ bash Miniconda3-latest-Linux-x86_64.sh
 bash
 conda update conda
 # edit ~/.condarc as described below
-mamba create -n equinox -c conda-forge python=3.9 tqdm \
+conda create -n equinox -c conda-forge python=3.9 tqdm \
             dask-jobqueue xarray zarr netcdf4 python-graphviz \
             fastparquet pyarrow bottleneck \
             jupyterlab jupyterhub ipywidgets \
