@@ -526,7 +526,7 @@ class tiler(object):
             ncfiles = glob(os.path.join(run_dir, "data_{:03d}/*.nc".format(t)))
             for f in ncfiles:
                 f_step = f.split("/")[-1].split("_")[1]
-                if int(f_step) >= step:
+                if f_step!="init" and int(f_step) >= step:
                     print("delete {}".format(f))
                     os.remove(f)
 

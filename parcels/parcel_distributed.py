@@ -24,12 +24,14 @@ step_window_delayed = delayed(pa.step_window)
 # ---- Run parameters
 
 # root_dir = '/home1/scratch/aponte/parcels/'
-# root_dir = "/home/datawork-lops-osi/equinox/mit4320/parcels/"
-root_dir = '/home1/scratch/slgentil/parcels/'
+root_dir = "/home/datawork-lops-osi/equinox/mit4320/parcels/"
+#root_dir = '/home1/scratch/slgentil/parcels/'
+#root_dir = '/home1/scratch/aponte/'
 
 # 5x5 tiles dij=100 T=365 5jobs x 5workers
 # run_name = "global_dij8_up3_r2s111_15j"
-run_name = "global_dij8_up3_r1s111_15j"
+#run_name = "global_dij8_up3_r1s111_15j"
+#run_name = "global_dij8_up3_r1s111_30j"
 
 # will overwrite existing simulation
 overwrite = True
@@ -67,7 +69,20 @@ overwrite = True
 
 ## uplet case
 
-T = 15  # length of the total run [days]
+t_start = ut.np64toDate(np.datetime64('2012-02-01'))
+run_name = "global_dij8_up3_r2s111_30j_201201"
+#
+#t_start = ut.np64toDate(np.datetime64('2012-05-01'))
+#run_name = "global_dij8_up3_r2s111_30j_201205"
+#
+#t_start = ut.np64toDate(np.datetime64('2012-08-01'))
+#run_name = "global_dij8_up3_r2s111_30j_201208"
+#
+#t_start = ut.np64toDate(np.datetime64('2011-12-01'))
+#run_name = "global_dij8_up3_r2s111_30j_201112"
+
+#T = 15  # length of the total run [days]
+T = 30  # length of the total run [days]
 dt_window = timedelta(days=1)
 dt_outputs = timedelta(hours=1.0)
 dt_step = timedelta(hours=1.0)
@@ -77,8 +92,8 @@ dt_reboot = timedelta(days=3)
 tile_size = dict(factor=(6, 10), overlap=(150, 150)) # reduce size of tiles and decrease overlap
 
 init_dij = 8  # initial position subsampling compared to llc grid
-# init_uplet = (3, 2./111.) # initial number of parcels at each release location
-init_uplet = (3, 1./111.) # initial number of parcels at each release location
+init_uplet = (3, 2./111.) # initial number of parcels at each release location
+#init_uplet = (3, 1./111.) # initial number of parcels at each release location
 
 pclass = "extended"
 # pclass = "jit"  # uplet debug
@@ -151,7 +166,10 @@ def run(dirs, tl, cluster, client):
 
     # set start and end times
     # t_start = ut.np64toDate(ds["time"][0].values)
-    t_start = ut.np64toDate(np.datetime64('2012-02-01'))
+    #t_start = ut.np64toDate(np.datetime64('2012-02-01'))
+    #t_start = ut.np64toDate(np.datetime64('2012-05-01'))
+    #t_start = ut.np64toDate(np.datetime64('2012-08-01'))
+    #t_start = ut.np64toDate(np.datetime64('2011-12-01'))
     t_end = t_start + int(T * 86400 / dt_window.total_seconds()) * dt_window
     str_fmt = "Global start = {}  /  Global end = {}".format(
         t_start.strftime("%Y-%m-%d %H:%M"),
@@ -192,15 +210,15 @@ def run(dirs, tl, cluster, client):
         step_t = step_t[:reboot]
         flag_out = True
 
-    timer_start = time()
+    #timer_start = time()
     for step, local_t_start in step_t:
 
         local_t_end = local_t_start + dt_window + dt_step
 
         # print step info
-        timer_stop = time()
-        format_info(step, local_t_start, local_t_end, timer_stop-timer_start)
         timer_start = time()
+        #format_info(step, local_t_start, local_t_end, timer_stop-timer_start)
+        format_info(step, local_t_start, local_t_end, 0)
 
         # load, tile (and store) llc data
         ds_tiles = pa.tile_store_llc(
@@ -281,6 +299,10 @@ def run(dirs, tl, cluster, client):
             global_parcel_number - global_parcel_number0,
         )
         logging.info(str_fmt)
+    
+        # update timer
+        timer_stop = time()
+        format_info(step, local_t_start, local_t_end, timer_start - timer_stop)
 
     return flag_out
 
@@ -424,8 +446,8 @@ if __name__ == "__main__":
     # to file
     logging.basicConfig(
         filename="distributed.log",
-        #level=logging.INFO,
-        level=logging.DEBUG,
+        level=logging.INFO,
+        #level=logging.DEBUG,
     )
     # level order is: DEBUG, INFO, WARNING, ERROR
     # encoding='utf-8', # available only in latests python versions
