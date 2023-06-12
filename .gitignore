@@ -7,6 +7,7 @@ clean
 *.swp
 .DS_Store
 *.zip
+*.html
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -22,6 +23,7 @@ __pycache__/
 .idea/
 
 # data files
+*.csv
 *.nc
 *.zarr
 

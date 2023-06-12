@@ -70,7 +70,7 @@ overwrite = True
 ## uplet case
 
 t_start = ut.np64toDate(np.datetime64('2012-02-01'))
-run_name = "global_dij8_up3_r2s111_30j_201201"
+run_name = "global_dij8_up3_r2s111_30j_201202"
 #
 #t_start = ut.np64toDate(np.datetime64('2012-05-01'))
 #run_name = "global_dij8_up3_r2s111_30j_201205"
@@ -82,12 +82,19 @@ run_name = "global_dij8_up3_r2s111_30j_201201"
 #run_name = "global_dij8_up3_r2s111_30j_201112"
 
 #T = 15  # length of the total run [days]
-T = 30  # length of the total run [days]
+T = 2  # length of the total run [days]
+#T = 30  # length of the total run [days]
 dt_window = timedelta(days=1)
 dt_outputs = timedelta(hours=1.0)
 dt_step = timedelta(hours=1.0)
 dt_seed = 0  # in days
 dt_reboot = timedelta(days=3)
+
+# smooth llc data
+#dt_smooth = None
+dt_smooth = "12H"
+if dt_smooth is not None:
+    run_name = run_name+"_smooth"+dt_smooth
 
 tile_size = dict(factor=(6, 10), overlap=(150, 150)) # reduce size of tiles and decrease overlap
 
@@ -115,6 +122,7 @@ jobqueuekw = dict(processes=2, cores=2) # uplet debug
 # jobqueuekw["env_extra"] =  ['export MKL_NUM_THREADS=1', 'export NUMEXPR_NUM_THREADS=1',
 #                            'export OMP_NUM_THREADS=4', 'export OPENBLAS_NUM_THREADS=1']
 # run_name = 'global_T6j_dt0p5j_dij50_4OMP_NUM_THREADS'
+
 
 # ----
 
@@ -226,6 +234,7 @@ def run(dirs, tl, cluster, client):
             slice(local_t_start, local_t_end, None),
             tl,
             persist=False,
+            dt_smooth=dt_smooth,
         )
         _ = wait(ds_tiles)
         logging.debug("llc data loaded")
@@ -302,7 +311,7 @@ def run(dirs, tl, cluster, client):
     
         # update timer
         timer_stop = time()
-        format_info(step, local_t_start, local_t_end, timer_start - timer_stop)
+        format_info(step, local_t_start, local_t_end, timer_stop - timer_start)
 
     return flag_out
 
@@ -354,7 +363,10 @@ def manual_kill_jobs():
     username = getpass.getuser()
     #
     bashCommand = "qstat"
-    output = subprocess.check_output(bashCommand, shell=True)
+    try:
+        output = subprocess.check_output(bashCommand, shell=True, stderr=subprocess.STDOUT)
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError("command '{}' return with error (code {}): {}".format(e.cmd, e.returncode, e.output))
     #
     for line in output.splitlines():
         lined = line.decode("UTF-8")

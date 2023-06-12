@@ -663,10 +663,16 @@ def tile_store_llc(ds,
                    netcdf=False,
                    coords = ["XG", "YG", "Depth"],
                    variables = ["SSU", "SSV", "Eta", "SST", "SSS"],
+                   dt_smooth = None,
                   ):
     """Process llc dataset and extract tile only relevant data"""
-    # extract time slice for dt_window
-    ds_tsubset = ds.sel(time=time_slice).reset_coords()[coords + variables]
+    if dt_smooth is None:
+        # extract time slice for dt_window
+        ds_tsubset = ds.sel(time=time_slice)
+    else:
+        ds_tsubset = temporal_zoom_roll(ds, time_slice, dt_smooth)
+    #
+    ds_tsubset = ds_tsubset.reset_coords()[coords + variables]
     # convert faces structure to global lat/lon structure
     if "face" in ds_tsubset.dims:
         # pair vector variables
@@ -708,6 +714,16 @@ def tile_store_llc(ds,
             ds_tiles.append(ds_tile.chunk(chunks={"time": 1}))
     return ds_tiles
 
+def temporal_zoom_roll(ds, time_slice, dt):
+    """ select temporal subset and apply a rolling average of size dt (e.g. "6H", ...) """
+    _dt = pd.Timedelta(dt)*2
+    time_slice_extended = slice(time_slice.start-_dt, time_slice.stop+_dt)
+    di = int(_dt/pd.Timedelta("1H"))
+    return (ds.sel(time=time_slice_extended)
+            .rolling(time=di, center=True)
+            .mean()
+            .sel(time=time_slice)
+           )
 
 # ------------------------------- parcels specific code ----------------------------
 
