@@ -666,11 +666,10 @@ def tile_store_llc(ds,
                    dt_smooth = None,
                   ):
     """Process llc dataset and extract tile only relevant data"""
-    if dt_smooth is None:
-        # extract time slice for dt_window
-        ds_tsubset = ds.sel(time=time_slice)
-    else:
-        ds_tsubset = temporal_zoom_roll(ds, time_slice, dt_smooth)
+    # extend time_slice if dt_smooth is not None
+    _time_slice = extend_time_slice(ds, time_slice, dt_smooth)
+    # extract time slice for dt_window
+    ds_tsubset = ds.sel(time=_time_slice)
     #
     ds_tsubset = ds_tsubset.reset_coords()[coords + variables]
     # convert faces structure to global lat/lon structure
@@ -703,23 +702,33 @@ def tile_store_llc(ds,
 
     D = tl.tile(ds_tsubset, persist=persist)
 
+    if dt_smooth is not None:
+        D = [temporal_zoom_roll(d, time_slice, dt_smooth) for d in D]
+
     ds_tiles = []
     # for tile, ds_tile in enumerate(tqdm(D)):
     for tile, ds_tile in enumerate(D):
         if netcdf:
             nc_file = os.path.join(tl.run_dirs[tile], "llc.nc")
+            
             ds_tile.to_netcdf(nc_file, mode="w")
             ds_tiles.append(None)
         else:
             ds_tiles.append(ds_tile.chunk(chunks={"time": 1}))
     return ds_tiles
 
+def extend_time_slice(ds, time_slice, dt):
+    if dt is None:
+        return time_slice
+    else:
+        dt_pd = pd.Timedelta(dt)*1.5
+        return slice(time_slice.start-dt_pd, time_slice.stop+dt_pd)
+
 def temporal_zoom_roll(ds, time_slice, dt):
     """ select temporal subset and apply a rolling average of size dt (e.g. "6H", ...) """
-    _dt = pd.Timedelta(dt)*2
-    time_slice_extended = slice(time_slice.start-_dt, time_slice.stop+_dt)
-    di = int(_dt/pd.Timedelta("1H"))
-    return (ds.sel(time=time_slice_extended)
+    dt_pd = pd.Timedelta(dt)*1.5
+    di = int(dt_pd/pd.Timedelta("1H"))
+    return (ds
             .rolling(time=di, center=True)
             .mean()
             .sel(time=time_slice)
