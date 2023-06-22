@@ -34,8 +34,8 @@ root_dir = "/home/datawork-lops-osi/equinox/mit4320/parcels/"
 #run_name = "global_dij8_up3_r1s111_30j"
 
 # will overwrite existing simulation
-overwrite = True
-#overwrite = False
+#overwrite = True
+overwrite = False
 
 ### simulation parameters
 
@@ -71,6 +71,8 @@ overwrite = True
 
 t_start = ut.np64toDate(np.datetime64('2012-02-01'))
 run_name = "global_dij8_up3_r2s111_30j_201202"
+#run_name = "global_dij8_up3_r4s111_30j_201202"
+#run_name = "global_dij8_up3_r05s111_30j_201202"
 #
 #t_start = ut.np64toDate(np.datetime64('2012-05-01'))
 #run_name = "global_dij8_up3_r2s111_30j_201205"
@@ -82,8 +84,8 @@ run_name = "global_dij8_up3_r2s111_30j_201202"
 #run_name = "global_dij8_up3_r2s111_30j_201112"
 
 #T = 15  # length of the total run [days]
-T = 2  # length of the total run [days]
-#T = 30  # length of the total run [days]
+#T = 2  # length of the total run [days]
+T = 30  # length of the total run [days]
 dt_window = timedelta(days=1)
 dt_outputs = timedelta(hours=1.0)
 dt_step = timedelta(hours=1.0)
@@ -91,16 +93,19 @@ dt_seed = 0  # in days
 dt_reboot = timedelta(days=3)
 
 # smooth llc data
-#dt_smooth = None
-dt_smooth = "12H"
+dt_smooth = None
+#dt_smooth = "12H"
+dt_smooth = "24H"
 if dt_smooth is not None:
     run_name = run_name+"_smooth"+dt_smooth
 
 tile_size = dict(factor=(6, 10), overlap=(150, 150)) # reduce size of tiles and decrease overlap
 
 init_dij = 8  # initial position subsampling compared to llc grid
+#init_uplet = (3, 4./111.) # initial number of parcels at each release location
 init_uplet = (3, 2./111.) # initial number of parcels at each release location
 #init_uplet = (3, 1./111.) # initial number of parcels at each release location
+#init_uplet = (3, 0.5/111.) # initial number of parcels at each release location
 
 pclass = "extended"
 # pclass = "jit"  # uplet debug

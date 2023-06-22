@@ -1,5 +1,6 @@
 import os
 from glob import glob
+import socket
 
 import numpy as np
 import xarray as xr
@@ -74,11 +75,19 @@ def fix_lon_bounds(lon):
 # ------------------------------ paths ---------------------------------------
 
 if os.path.isdir("/home/datawork-lops-osi/"):
-    # datarmor
-    platform = "datarmor"
-    datawork = os.getenv("DATAWORK") + "/"
-    home = os.getenv("HOME") + "/"
-    scratch = os.getenv("SCRATCH") + "/"
+    hostname = socket.gethostname()
+    if hostname=="dunree":
+        # dunree
+        platform = "datarmor"
+        datawork = "/home1/datawork/aponte/"
+        home = "/home1/datahome/aponte/"
+        scratch = "/home1/scratch/aponte/"
+    else:
+        # datarmor
+        platform = "datarmor"
+        datawork = os.getenv("DATAWORK") + "/"
+        home = os.getenv("HOME") + "/"
+        scratch = os.getenv("SCRATCH") + "/"
     osi = "/home/datawork-lops-osi/"
     #
     root_data_dir = "/home/datawork-lops-osi/equinox/mit4320/"
