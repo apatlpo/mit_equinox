@@ -1658,7 +1658,7 @@ class parcels_output(object):
                 data = data.persist()
             return data
         else:
-            print("{} does not exist".parquet_path)
+            print("{} does not exist".format(data_path))
 
 
 def _check_diagnostic_directory(directory, dirname, create=False):

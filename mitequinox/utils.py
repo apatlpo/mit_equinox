@@ -405,17 +405,19 @@ def load_diagnostic(name, directory=None, **kwargs):
         directory = diag_dir
     _dir = _check_diagnostic_directory(directory)
     # find the diagnostic file
-    _file = glob(os.path.join(_dir, name + ".*"))
-    assert len(_file) == 1, "More that one diagnostic file {}".format(_file)
-    _file = _file[0]
+    #_file = glob(os.path.join(_dir, name + ".*"))
+    #assert len(_file) == 1, "More that one diagnostic file {}".format(_file)
+    #_file = _file[0]
+    _file = os.path.join(_dir, name+".zarr")
+    print(_file)
     # get extension
-    _extension = _file.split(".")[-1]
-    if _extension == "zarr":
-        return xr.open_zarr(_file, **kwargs)
-    elif _extension == "nc":
-        return xr.open_dataset(_file, **kwargs)
-    else:
-        raise NotImplementedError("{} extension not implemented yet".format(_extension))
+    #_extension = _file.split(".")[-1]
+    #if _extension == "zarr":
+    return xr.open_zarr(_file, **kwargs)
+    #elif _extension == "nc":
+    #    return xr.open_dataset(_file, **kwargs)
+    #else:
+    #    raise NotImplementedError("{} extension not implemented yet".format(_extension))
 
 
 def _check_diagnostic_directory(

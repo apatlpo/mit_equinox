@@ -94,8 +94,8 @@ dt_reboot = timedelta(days=3)
 
 # smooth llc data
 dt_smooth = None
-#dt_smooth = "12H"
-dt_smooth = "24H"
+dt_smooth = "12H"
+#dt_smooth = "24H"
 if dt_smooth is not None:
     run_name = run_name+"_smooth"+dt_smooth
 
