@@ -1,22 +1,9 @@
-import os, shutil
-import logging
-from time import time
+# --------------------- application related librairies and parameters ------------------
 
 import numpy as np
 import pandas as pd
 import xarray as xr
 from datetime import timedelta, datetime
-
-import dask
-from dask.delayed import delayed
-from dask.distributed import performance_report, wait
-from distributed.diagnostics import MemorySampler
-
-# try to force flushing of memory
-import gc, ctypes
-
-
-# ---- Run parameters
 
 root_dir = "/home/datawork-lops-osi/equinox/mit4320/parcels/"
 run_name = "global_dij8_up3_r2s111_30j_201202"
@@ -30,7 +17,18 @@ dask_jobs = 8
 jobqueuekw = dict(processes=2, cores=2) # uplet debug
 
 
-# ---------------------------------- dask utils ---------------------------------- 
+# ---------------------------- dask utils - do not touch -------------------------------
+
+import os, shutil
+import logging
+
+import dask
+from dask.delayed import delayed
+from dask.distributed import performance_report, wait
+from distributed.diagnostics import MemorySampler
+
+# to force flushing of memory
+import gc, ctypes
 
 def trim_memory() -> int:
     libc = ctypes.CDLL("libc.so.6")
