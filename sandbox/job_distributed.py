@@ -111,7 +111,7 @@ def dashboard_ssh_forward(client):
     """
     env = os.environ
     port = client.scheduler_info()["services"]["dashboard"]
-    return f'ssh -N -L {port}:{env["HOSTNAME"]}:8787 {env["USER"]}@datarmor1-10g'
+    return f'ssh -N -L {port}:{env["HOSTNAME"]}:8787 {env["USER"]}@datarmor1-10g', port
 
 
 def close_dask(cluster, client):
@@ -262,9 +262,9 @@ if __name__ == "__main__":
             walltime="12:00:00",
             **jobqueuekw,
         )
-        logging.info("dashboard via ssh: " + dashboard_ssh_forward(client))
-        logging.info("open browser at address of the type: http://localhost:XXX (port address XXX is first number in line above and may vary)")
-        print(cluster)
+        ssh_command, dashboard_port = dashboard_ssh_forward(client)
+        logging.info("dashboard via ssh: " + ssh_command)
+        logging.info(f"open browser at address of the type: http://localhost:{dashboard_port}")
 
         # run case WITHOUT MemorySampler:
         flag = run(None, cluster, client)
