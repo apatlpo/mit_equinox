@@ -264,6 +264,7 @@ if __name__ == "__main__":
             **jobqueuekw,
         )
         logging.info("dashboard via ssh: " + dashboard_ssh_forward(client))
+        logging.info("open browser at address of the type: http://localhost:XXX (port address XXX is first number in line above and may vary)")
         print(cluster)
 
         # run case WITHOUT MemorySampler:
@@ -282,7 +283,7 @@ if __name__ == "__main__":
         close_dask(cluster, client)
 
         # mechanism to exit (here or in run via flag)
-        if reboot > 5:
+        if reboot > 2:
             flag == False
 
         reboot += 1
