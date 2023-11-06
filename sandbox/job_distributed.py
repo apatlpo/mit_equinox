@@ -1,3 +1,5 @@
+# --------------------- application related librairies and parameters ------------------
+
 import os, shutil
 import logging
 from time import sleep, time
@@ -8,12 +10,10 @@ import xarray as xr
 from datetime import timedelta, datetime
 
 import dask
-
 # from dask.delayed import delayed
 from dask.distributed import performance_report, wait
 from distributed.diagnostics import MemorySampler
-
-# try to force flushing of memory
+# to force flushing of memory
 import gc, ctypes
 
 
@@ -31,7 +31,7 @@ dask_jobs = 2  # number of dask pbd jobs
 jobqueuekw = dict(processes=2, cores=2)  # uplet debug
 
 
-# ---------------------------------- dask utils ----------------------------------
+# ---------------------------- dask utils - do not touch -------------------------------
 
 
 def spin_up_cluster(
