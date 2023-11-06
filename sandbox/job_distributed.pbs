@@ -22,4 +22,4 @@ python job_distributed.py
 date
 
 # cleanup dask workers
-python /home1/datahome/aponte/mit_equinox/launch/kill.py
+#python /home1/datahome/aponte/mit_equinox/launch/kill.py
