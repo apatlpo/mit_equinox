@@ -9,7 +9,7 @@ import pandas as pd
 import xarray as xr
 from datetime import timedelta, datetime
 
-import dask
+from dask import compute
 
 # from dask.delayed import delayed
 from dask.distributed import performance_report, wait
@@ -180,7 +180,7 @@ def dask_compute_batch(computations, client, batch_size=None):
     outputs = []
     for b in batches:
         logging.info("batches: " + str(b) + " / " + str(total_range))
-        out = dask.compute(*computations[slice(b[0], b[-1] + 1)])
+        out = compute(*computations[slice(b[0], b[-1] + 1)])
         outputs.append(out)
 
         # try to manually clean up memory
@@ -200,24 +200,31 @@ def trim_memory() -> int:
 
 
 def run(v, cluster, client):
-    """ """
+    """main execution code"""
 
     # load or create dataset and do work
     # ds = ...
+    # synthetic example here to compute pi:
+    import dask.array as da
+
     n, c = 10_000, 1_000
-    x = dask.array.random.random((n, n), chunks=(c, c))
-    y = dask.array.random.random((n, n), chunks=(c, c))
-    z = dask.array.where((x**2 + y**2) < 1, 1, 0)
+    x = da.random.random((n, n), chunks=(c, c))
+    y = da.random.random((n, n), chunks=(c, c))
+    z = da.where((x**2 + y**2) < 1, 1, 0)
     result = 4 * z.sum().compute() / n**2
 
     str_fmt = f"some information in run ... result={result}"
     logging.info(str_fmt)
 
-    flat_out = True
-    return flag_out
+    # controls whether we exit main loop
+    flag = True
+
+    return flag
 
 
 if __name__ == "__main__":
+
+    ## step0: setup logging
 
     # to std output
     # logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
@@ -234,15 +241,12 @@ if __name__ == "__main__":
     # https://blog.dask.org/2021/03/11/dask_memory_usage
     # log dask summary?
 
-    # create run directory tree
+    ## step1: create directory tree
     logging.info("1 - step 1")
     # ...
 
-    # create tiling
-    logging.info("2 - step 2")
-    # ...
-
-    logging.info("4 - start main loop")
+    ## step2: setup main loop
+    logging.info("2 - start main loop")
 
     flag = True
     reboot = 0
