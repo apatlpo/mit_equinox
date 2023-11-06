@@ -248,8 +248,7 @@ if __name__ == "__main__":
     ## step2: setup main loop
     logging.info("2 - start main loop")
 
-    flag = True
-    reboot = 0
+    flag, reboot = True, 0
     while flag:
 
         logging.info("--- reboot %d", reboot)
@@ -284,7 +283,7 @@ if __name__ == "__main__":
 
         # mechanism to exit (here or in run via flag)
         if reboot > 2:
-            flag == False
+            flag = False
 
         reboot += 1
 
