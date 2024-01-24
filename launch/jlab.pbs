@@ -12,7 +12,8 @@
 # cd to the directory you submitted your job
 cd $PBS_O_WORKDIR
 
-setenv PATH ${HOME}/.miniconda3/envs/$CONDAENV/bin:${PATH}
+#setenv PATH ${HOME}/.miniconda3/envs/$CONDAENV/bin:${PATH}
+setenv PATH /home1/datawork/aponte/miniconda3/envs/$CONDAENV/bin:${PATH}
 
 setenv OMP_NUM_THREADS 1
 setenv NUMEXPR_NUM_THREADS 1
