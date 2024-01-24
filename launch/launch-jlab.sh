@@ -55,7 +55,8 @@ fi
 echo Conda environment: "${CONDAENV}"
 #echo POSITIONAL = "${POSITIONAL[0]}"
 
-source $HOME/.miniconda3/etc/profile.d/conda.sh
+#source $HOME/.miniconda3/etc/profile.d/conda.sh
+source /home1/datawork/aponte/miniconda3/etc/profile.d/conda.sh
 conda activate $CONDAENV
 
 # create a log file with random name and delete existing jlab log file if any

@@ -4,6 +4,7 @@ import socket
 import subprocess
 import json
 from glob import glob
+from time import sleep
 
 if __name__ == '__main__':
 
@@ -27,10 +28,10 @@ if __name__ == '__main__':
         while not glob('*.nodefile'):
             pass
         nodefile = glob('*.nodefile')[-1]
-    elif dashinfo is not '0':
+    elif dashinfo!='0':
         nodefile = dashinfo
 
-    if dashinfo is not '0':
+    if dashinfo!='0':
         dash = True
         with open(nodefile) as f:
             head = f.readline()
@@ -41,9 +42,12 @@ if __name__ == '__main__':
 
     cmd = ['jupyter', 'lab', '--ip', host, 
            '--no-browser', '--port', jlab_port, 
-           '--notebook-dir', notebook_dir]
-    #print(' '.join(cmd))
-    proc = subprocess.Popen(cmd)
+           '--notebook-dir', notebook_dir ]
+    print(' '.join(cmd))
+    #cmd = ['jupyter lab --ipp '+host+' --no-browser --port '+jlab_port+' --notebook-dir '+notebook_dir+' > "output.txt" ']
+    
+    #with open("jlab.output", ) 
+    popen = subprocess.Popen(cmd, stdout=subprocess.PIPE, universal_newlines=True)
 
     print(f'ssh -N -L {jlab_port}:{host}:{jlab_port} '
               f'-L {dash_port}:{bhost}:8787 {user}@{hostname}')
@@ -52,6 +56,15 @@ if __name__ == '__main__':
     print(f'\tJupyter lab: http://localhost:{jlab_port}')
     print(f'\tDask dashboard: http://localhost:{dash_port}', flush=True)
 
+    sleep(10)
 
+    # this is not working at the moment
+    for stdout_line in iter(popen.stdout.readline, ""):
+        #yield stdout_line 
+        print(stdout_line)
+    popen.stdout.close()
+    return_code = popen.wait()
+    if return_code:
+        raise subprocess.CalledProcessError(return_code, cmd)
 
 
