@@ -6,7 +6,7 @@ bash Miniconda3-latest-Linux-x86_64.sh
 bash
 conda update conda
 # edit ~/.condarc as described below
-conda create -n equinox -c conda-forge python=3.9 tqdm \
+conda create -n equinox -c conda-forge python=3.10 tqdm \
             dask-jobqueue xarray zarr netcdf4 python-graphviz \
             fastparquet pyarrow bottleneck \
             jupyterlab jupyterhub ipywidgets \
@@ -75,6 +75,36 @@ channels:
   - conda-forge
   - defaults
 ```
+
+## mamba
+
+Mamba does not work with C-shell at the moment and rather than installing Miniforge as [recommanded](https://mamba.readthedocs.io/en/latest/installation/mamba-installation.html), we stick with Miniconda and an install of mamba in the base environment.
+
+```
+conda install -n base --override-channels -c conda-forge mamba  #'python_abi=*=*cp*'
+conda activate base
+mamba create -n equinox -c conda-forge python=3.10 tqdm \
+            dask-jobqueue xarray zarr netcdf4 python-graphviz \
+            fastparquet pyarrow bottleneck \
+            jupyterlab jupyterhub ipywidgets \
+            xhistogram flox \
+            cartopy geopandas descartes xesmf rioxarray boule \
+            scikit-learn seaborn hvplot geoviews datashader nodejs \
+            intake-xarray gcsfs cmocean gsw \
+            pytide pyinterp h3-py parcels
+
+conda activate equinox
+
+pip install git+https://github.com/xgcm/xgcm.git
+pip install git+https://github.com/MITgcm/xmitgcm.git
+pip install git+https://github.com/xgcm/xrft.git
+pip install git+https://github.com/pangeo-data/rechunker.git
+pip install black
+
+mamba install pywavelets
+
+```
+
 
 # General information about miniconda:
 
