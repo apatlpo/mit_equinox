@@ -28,9 +28,9 @@ from dask.delayed import delayed
 
 from xmitgcm.llcreader import llcmodel as llc
 
-from parcels import FieldSet, ParticleSet, ParticleFile, plotTrajectoriesFile, Variable
+from parcels import FieldSet, ParticleSet, ParticleFile, Variable
 from parcels import JITParticle, ScipyParticle
-from parcels import ErrorCode, NestedField, AdvectionEE, AdvectionRK4
+from parcels import NestedField, AdvectionEE, AdvectionRK4
 
 from .utils import haversine
 

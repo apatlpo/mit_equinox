@@ -28,6 +28,11 @@ case $key in
     shift # past argument
     shift # past value
     ;;
+    -h|--home)
+    JLABHOME="$2"
+    shift # past argument
+    shift # past value
+    ;;
     *)    # unknown option
     POSITIONAL+=("$1") # save it in an array for later
     shift # past argument
@@ -42,6 +47,10 @@ fi
 
 if [ "${#PORTDIGIT}" -eq 0 ]; then
     PORTDIGIT="7"
+fi
+
+if [ "${#JLABHOME}" -eq 0 ]; then
+    JLABHOME=$HOME
 fi
 
 if [ "${#POSITIONAL[0]}" -eq 0 ]; then
@@ -64,8 +73,10 @@ JLAB_LOG="jlab.$RANDOM.log"
 rm -f $JLAB_LOG > /dev/null 2>&1
 
 echo "Launching job ..."
-s=`qsub -m n -v JLAB_LOG=$JLAB_LOG,DASHINFO=$DASHINFO,CONDAENV=$CONDAENV,PORTDIGIT=$PORTDIGIT jlab.pbs`
+s=`qsub -m n -v JLAB_LOG=$JLAB_LOG,DASHINFO=$DASHINFO,CONDAENV=$CONDAENV,PORTDIGIT=$PORTDIGIT,JLABHOME=$JLABHOME jlab.pbs`
 # in order to have live log output, use the following qsub option: -k oe
+
+echo $s
 
 sjob=${s%.*}
 echo " ... ${s} launched"
@@ -73,8 +84,9 @@ echo " ... ${s} launched"
 # wait for jlab.log
 while true; do
     if [ -f $JLAB_LOG ]; then
-        #echo "$JLAB_LOG has been found "
-	cat ${JLAB_LOG}
+        echo "$JLAB_LOG has been found: cat $JLAB_LOG"
+        #sleep 5s
+	cat $JLAB_LOG
         echo "Kill jlab job with:"
         echo "qdel ${sjob}"
         break

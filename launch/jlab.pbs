@@ -22,7 +22,7 @@ setenv OPENBLAS_NUM_THREADS 1
 
 date
 # launch jupyterlab
-python jlab.py $DASHINFO $PORTDIGIT  > $JLAB_LOG
+python jlab.py $DASHINFO $PORTDIGIT $JLABHOME  > $JLAB_LOG
 # and goes to sleep
 sleep 24h
 date

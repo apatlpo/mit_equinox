@@ -8,14 +8,15 @@ from time import sleep
 
 if __name__ == '__main__':
 
-    assert len(sys.argv)==3
+    assert len(sys.argv)==4
     dashinfo = sys.argv[1]
     portdigit = sys.argv[2]
+    notebook_dir = sys.argv[3]
+    #notebook_dir = os.environ['HOME']
 
     jlab_port = '887%s' %portdigit
     dash_port = '878%s' %portdigit
 
-    notebook_dir = os.environ['HOME']
     user = os.environ['USER']
 
     host = socket.gethostname() # where jlab will be running
