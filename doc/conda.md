@@ -42,11 +42,11 @@ pip install black
 cd mit_equinox; pip install -e .
 
 # line below does not work well on datarmor
-jupyter labextension install @jupyter-widgets/jupyterlab-manager \
-                             @pyviz/jupyterlab_pyviz \
-                             jupyter-leaflet
+#jupyter labextension install @jupyter-widgets/jupyterlab-manager \
+#                             @pyviz/jupyterlab_pyviz \
+#                             jupyter-leaflet
 
-cp launch/jobqueue.yaml launch/distributed.yaml ~/.config/dask/
+#cp launch/jobqueue.yaml launch/distributed.yaml ~/.config/dask/
 ```
 
 To install pange-pytide locally (no working at the moment):
