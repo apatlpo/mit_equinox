@@ -333,7 +333,8 @@ class tiler(object):
             )
 
         # regenerate projections
-        self.CRS = list(map(pyproj.CRS, list(ds["crs_strings"].values)))
+        #self.CRS = list(map(pyproj.CRS, list(ds["crs_strings"].values)))
+        self.CRS = list(map(pyproj.CRS, [c.replace("EPSG:", "") for c in ds["crs_strings"].values]))
 
         # list of land tiles
         if "del_tile" in ds:
