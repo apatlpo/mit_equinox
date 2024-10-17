@@ -726,9 +726,9 @@ def extend_time_slice(ds, time_slice, dt):
         return slice(time_slice.start-dt_pd, time_slice.stop+dt_pd)
 
 def temporal_zoom_roll(ds, time_slice, dt):
-    """ select temporal subset and apply a rolling average of size dt (e.g. "6H", ...) """
+    """ select temporal subset and apply a rolling average of size dt (e.g. "6h", ...) """
     dt_pd = pd.Timedelta(dt)*1.5
-    di = int(dt_pd/pd.Timedelta("1H"))
+    di = int(dt_pd/pd.Timedelta("1h"))
     return (ds
             .rolling(time=di, center=True)
             .mean()
@@ -1726,7 +1726,7 @@ def _reset_chunk_encoding(ds):
 def plot_llc_parcels(
     t_start,
     t_end,
-    t_delta="1H",
+    t_delta="1h",
     parquet_dir=None,
     trail=None,
     flag_drifters=0,
@@ -1747,7 +1747,7 @@ def plot_llc_parcels(
     t_start: str, pd.Timestamp
         Figures end time
     t_delta: str, optional
-        Time interval between figures, default is "1H"
+        Time interval between figures, default is "1h"
     trail: pd.Timedelta, str, optional
         Length of drifter tracks trail
     drifter_kwargs: dict, optional

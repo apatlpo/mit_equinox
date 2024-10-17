@@ -354,7 +354,7 @@ def time_window_processing(
             regular_time = np.arange(tmin, tmax, dt)
             df = df.reindex(regular_time).interpolate()
         elif isinstance(dt, str):
-            df = df.set_index("date").resample(dt).pad().reset_index()
+            df = df.set_index("date").resample(dt).ffill().reset_index()
             # by default converts to days then
             dt = pd.Timedelta(dt) / pd.Timedelta("1D")
         if geo:

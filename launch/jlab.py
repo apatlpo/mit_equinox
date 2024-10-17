@@ -41,9 +41,9 @@ if __name__ == '__main__':
         dash = False
         bhost = host
 
-    cmd = ['jupyter', 'lab', '--ip', host, 
-           '--no-browser', '--port', jlab_port, 
-           '--notebook-dir', notebook_dir ]
+    cmd = ['jupyter', 'lab', '--ip='+host, 
+           '--no-browser', '--port='+jlab_port, 
+           '--notebook-dir='+notebook_dir ]
     print(' '.join(cmd))
     #cmd = ['jupyter lab --ipp '+host+' --no-browser --port '+jlab_port+' --notebook-dir '+notebook_dir+' > "output.txt" ']
     
